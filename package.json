@@ -1,0 +1,56 @@
+{
+  "name": "console-axi",
+  "version": "0.1.0",
+  "description": "An AXI (Agent eXperience Interface) CLI for the Akash Console managed-wallet API. Token-efficient TOON output, content-first, idempotent commands for agents.",
+  "type": "module",
+  "bin": {
+    "console-axi": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "gen:api": "tsx scripts/gen-api.ts",
+    "gen:skill": "tsx scripts/gen-skill.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run gen:skill"
+  },
+  "keywords": [
+    "akash",
+    "axi",
+    "agent",
+    "cli",
+    "toon",
+    "deploy"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@toon-format/toon": "^2.3.0",
+    "commander": "^15.0.0",
+    "openapi-fetch": "^0.17.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.13",
+    "eslint": "^9.39.4",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "openapi-typescript": "^7.13.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.62.0",
+    "vitest": "^4.1.9"
+  }
+}
