@@ -5,7 +5,13 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AxiError } from "../errors.js";
-import { configPath, DEFAULT_BASE_URL, requireAuth, resolveConfig, type StoredConfig } from "./config.js";
+import {
+  configPath,
+  DEFAULT_BASE_URL,
+  requireAuth,
+  resolveConfig,
+  type StoredConfig
+} from "./config.js";
 
 describe("config resolution", () => {
   const tempDirs: string[] = [];
@@ -54,6 +60,21 @@ describe("config resolution", () => {
     expect(config.baseUrl).toBe("https://override.example");
   });
 
+  it("substitutes the network into the default provider-proxy URL", () => {
+    setup();
+
+    expect(resolveConfig().providerProxyUrl).toBe("https://console.akash.network/provider-proxy-mainnet");
+  });
+
+  it("lets CONSOLE_NETWORK pick the provider-proxy network segment", () => {
+    setup({ env: { CONSOLE_NETWORK: "sandbox" } });
+
+    const config = resolveConfig();
+
+    expect(config.network).toBe("sandbox");
+    expect(config.providerProxyUrl).toBe("https://console.akash.network/provider-proxy-sandbox");
+  });
+
   it("throws a friendly auth error when requireAuth finds no key", () => {
     setup();
 
@@ -74,6 +95,7 @@ describe("config resolution", () => {
     vi.stubEnv("CONSOLE_API_KEY", input.env?.CONSOLE_API_KEY);
     vi.stubEnv("CONSOLE_API_URL", input.env?.CONSOLE_API_URL);
     vi.stubEnv("CONSOLE_PROVIDER_PROXY_URL", input.env?.CONSOLE_PROVIDER_PROXY_URL);
+    vi.stubEnv("CONSOLE_NETWORK", input.env?.CONSOLE_NETWORK);
 
     if (input.stored) {
       const path = configPath();
