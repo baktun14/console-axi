@@ -73,9 +73,10 @@ The hook injects a compact status view (auth, active deployment count, top deplo
 |---------|-----|-----------|---------|
 | API key | `CONSOLE_API_KEY` | `apiKey` | — |
 | API base URL | `CONSOLE_API_URL` | `baseUrl` | `https://console-api.akash.network` |
-| Provider proxy | `CONSOLE_PROVIDER_PROXY_URL` | `providerProxyUrl` | `https://console-provider-proxy.akash.network` |
+| Provider proxy | `CONSOLE_PROVIDER_PROXY_URL` | `providerProxyUrl` | `https://console.akash.network/provider-proxy-%{NETWORK}` |
+| Network | `CONSOLE_NETWORK` | `network` | `mainnet` |
 
-Precedence: env > stored config > defaults. `--url` overrides the base URL per invocation.
+Precedence: env > stored config > defaults. `--url` overrides the base URL per invocation. `%{NETWORK}` in the provider-proxy URL is replaced with the resolved network (used by `logs`, `events`, `exec`, `shell`).
 
 ## Development
 
@@ -125,7 +126,7 @@ export CONSOLE_API_KEY=<your-key>     # from the Console web UI: /user/api-keys
 
 console-axi whoami                    # confirms auth
 console-axi wallet balance            # confirms funds (USD)
-console-axi deploy --sdl examples/hello.yml --deposit 5   # returns a live URI
+console-axi deploy --sdl examples/hello.yml --deposit 0.5  # returns a live URI
 console-axi deployment status <dseq>  # use the dseq from deploy
 console-axi logs <dseq> --tail 50
 console-axi exec <dseq> --service web -- echo hi ; echo "exit=$?"
@@ -134,6 +135,21 @@ console-axi deployment close <dseq>   # clean up (stops spend)
 
 `deploy` is safe-on-failure: if no bids arrive it leaves the deployment open and
 prints the exact retry/close commands, so nothing is stranded silently.
+
+#### Manual (step-by-step) deploy
+
+`deploy` is `create -> bid list -> lease create -> wait` in one call. To drive
+the steps yourself (e.g. to pick a specific provider), run them individually.
+`deployment create` caches the generated manifest by dseq, so `lease create`
+needs no `--manifest` argument:
+
+```bash
+console-axi deployment create --sdl examples/hello.yml --deposit 0.5  # prints dseq
+console-axi bid list --dseq <dseq>                                    # pick gseq/oseq/provider
+console-axi lease create --dseq <dseq> --gseq 1 --oseq 1 --provider <addr>
+console-axi deployment status <dseq>                                  # wait for ready + URIs
+console-axi deployment close <dseq>
+```
 
 ## License
 

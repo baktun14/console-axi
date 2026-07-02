@@ -5,7 +5,7 @@ import { type RawDeploymentEntry, summarizeDeployment } from "../api/deployment-
 import { getCurrentUser } from "../api/user.js";
 import { resolveConfig } from "../config/config.js";
 import { action, overridesFrom } from "../context.js";
-import { formatUsd } from "../output/price.js";
+import { formatUsd, uactToUsd } from "../output/price.js";
 import { printResult } from "../output/render.js";
 
 const DESCRIPTION = "Deploy and manage Akash workloads via the Console managed wallet";
@@ -53,7 +53,7 @@ export async function renderHome(command: Command, options: { trimmed: boolean }
     bin: "console-axi",
     description: DESCRIPTION,
     auth: `${user.username} (api-key)`,
-    wallet: `${formatUsd(balances.balance)} available of ${formatUsd(balances.total)}`,
+    wallet: `${formatUsd(uactToUsd(balances.balance))} available of ${formatUsd(uactToUsd(balances.total))}`,
     deployments: `${active.length} active of ${total} total`
   };
 

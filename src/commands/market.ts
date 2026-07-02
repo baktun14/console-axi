@@ -2,6 +2,8 @@ import type { Command } from "commander";
 
 import { unwrap } from "../api/client.js";
 import { action, authedContext } from "../context.js";
+import { readCachedManifest } from "../deploy/manifest-store.js";
+import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { blockPriceToUsdPerMonth } from "../output/price.js";
 import { printResult } from "../output/render.js";
@@ -51,7 +53,7 @@ export function registerBid(program: Command): void {
           { count: `${bids.length} open`, bids },
           {
             help: [
-              "console-axi lease create --dseq <dseq> --gseq <g> --oseq <o> --provider <p> --manifest <file>",
+              "console-axi lease create --dseq <dseq> --gseq <g> --oseq <o> --provider <p>",
               `console-axi deploy --sdl <file> --deposit <usd>`
             ]
           }
@@ -70,15 +72,23 @@ export function registerLease(program: Command): void {
     .requiredOption("--gseq <gseq>", "group sequence number")
     .requiredOption("--oseq <oseq>", "order sequence number")
     .requiredOption("--provider <provider>", "provider address")
-    .requiredOption("--manifest <file|->", "manifest file path, or - for stdin")
+    .option("--manifest <file|->", "manifest file/stdin (defaults to the one cached by `deployment create`)")
     .action(
       action(
         async (
-          opts: { dseq: string; gseq: string; oseq: string; provider: string; manifest: string },
+          opts: { dseq: string; gseq: string; oseq: string; provider: string; manifest?: string },
           command: Command
         ) => {
           const { client } = authedContext(command);
-          const manifest = readFileOrStdin(opts.manifest);
+          const manifest = opts.manifest ? readFileOrStdin(opts.manifest) : readCachedManifest(opts.dseq);
+          if (!manifest) {
+            throw new AxiError({
+              code: "not_found",
+              message: `No cached manifest for deployment ${opts.dseq}. Pass --manifest, or recreate with \`deployment create\`.`,
+              details: { dseq: opts.dseq },
+              help: [`console-axi deployment create --sdl <file> --deposit <usd>`]
+            });
+          }
           unwrap(
             await client.POST("/v1/leases", {
               body: {

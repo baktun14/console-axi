@@ -3,6 +3,7 @@ import type { Command } from "commander";
 import { unwrap } from "../api/client.js";
 import { collectUris, isDeploymentReady, type RawLease } from "../api/deployment-format.js";
 import { action, authedContext } from "../context.js";
+import { saveManifest } from "../deploy/manifest-store.js";
 import { type BidLike, parseAcceptStrategy, selectBids } from "../deploy/select-bids.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
@@ -38,6 +39,8 @@ export function registerDeploy(program: Command): void {
         const created = unwrap(await client.POST("/v1/deployments", { body: { data: { sdl, deposit } } })).data;
         const dseq = created.dseq;
         const manifest = created.manifest;
+        // Cache so a manual `lease create` can recover if this composite fails mid-way.
+        saveManifest(dseq, manifest);
 
         // 2. Wait for bids.
         const bids = await pollUntil<BidLike[]>(
