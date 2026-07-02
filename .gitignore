@@ -1,5 +1,32 @@
+# Build & deps
 node_modules
 dist
+coverage
 *.log
 .DS_Store
-coverage
+
+# Env files (never commit real values; use .env.example for templates)
+.env
+.env.*
+!.env.example
+.envrc
+
+# Secrets, credentials, keys
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+id_dsa
+credentials.json
+secrets.json
+secrets.yaml
+config.secrets.*
+*.token
+.netrc
+.npmrc
+kubeconfig
+
+# console-axi runtime config (also lives in ~/.config, but block it here too)
+console-axi-config.json
