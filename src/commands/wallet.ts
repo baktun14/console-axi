@@ -4,7 +4,7 @@ import { unwrap } from "../api/client.js";
 import { getUserId } from "../api/user.js";
 import { action, authedContext } from "../context.js";
 import { AxiError } from "../errors.js";
-import { formatUsd } from "../output/price.js";
+import { formatUsd, uactToUsd } from "../output/price.js";
 import { printResult } from "../output/render.js";
 
 interface RawWallet {
@@ -44,7 +44,7 @@ export function registerWallet(program: Command): void {
     printResult({
       wallets: wallets.map((w) => ({
         address: w.address ?? "-",
-        balance: formatUsd(w.creditAmount),
+        balance: formatUsd(uactToUsd(w.creditAmount)),
         trialing: w.isTrialing
       }))
     });
@@ -62,9 +62,9 @@ export function registerWallet(program: Command): void {
         const { client } = authedContext(command);
         const b = unwrap(await client.GET("/v1/balances")).data;
         printResult({
-          available: formatUsd(b.balance),
-          inDeployments: formatUsd(b.deployments),
-          total: formatUsd(b.total)
+          available: formatUsd(uactToUsd(b.balance)),
+          inDeployments: formatUsd(uactToUsd(b.deployments)),
+          total: formatUsd(uactToUsd(b.total))
         });
       })
     );
