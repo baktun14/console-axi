@@ -19,9 +19,9 @@ export async function getCurrentUser(client: ApiClient): Promise<CurrentUser> {
   return cachedUser;
 }
 
-/** Resolve the `userId` needed by /v1/wallets, /v1/tx and /v1/usage. */
+/** Internal user UUID (the `id`, not the OAuth `userId`) that /v1/wallets requires. */
 export async function getUserId(client: ApiClient): Promise<string> {
-  return (await getCurrentUser(client)).userId;
+  return (await getCurrentUser(client)).id;
 }
 
 /** Test helper: reset the in-process cache. */
