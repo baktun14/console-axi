@@ -10,6 +10,7 @@ import {
   uactToUsd
 } from "../api/deployment-format.js";
 import { action, authedContext } from "../context.js";
+import { saveManifest } from "../deploy/manifest-store.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { blockPriceToUsdPerMonth } from "../output/price.js";
@@ -158,6 +159,8 @@ export function registerDeployment(program: Command): void {
         const sdl = readFileOrStdin(opts.sdl);
         const deposit = parseUsd(opts.deposit, "--deposit");
         const data = unwrap(await client.POST("/v1/deployments", { body: { data: { sdl, deposit } } })).data;
+        // Cache the manifest so `lease create` can send it without a manual arg.
+        saveManifest(data.dseq, data.manifest);
         printResult(
           { dseq: data.dseq, txHash: data.signTx.transactionHash, state: "open" },
           {
