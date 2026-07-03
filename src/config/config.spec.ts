@@ -8,6 +8,7 @@ import { AxiError } from "../errors.js";
 import {
   configPath,
   DEFAULT_BASE_URL,
+  DEFAULT_CONSOLE_WEB_URL,
   requireAuth,
   resolveConfig,
   type StoredConfig
@@ -75,6 +76,21 @@ describe("config resolution", () => {
     expect(config.providerProxyUrl).toBe("https://console.akash.network/provider-proxy-sandbox");
   });
 
+  it("defaults the Console web URL when nothing is set", () => {
+    setup();
+
+    expect(resolveConfig().consoleWebUrl).toBe(DEFAULT_CONSOLE_WEB_URL);
+  });
+
+  it("prefers CONSOLE_WEB_URL over the stored value and strips a trailing slash", () => {
+    setup({
+      stored: { consoleWebUrl: "https://stored.console.example" },
+      env: { CONSOLE_WEB_URL: "https://env.console.example/" }
+    });
+
+    expect(resolveConfig().consoleWebUrl).toBe("https://env.console.example");
+  });
+
   it("throws a friendly auth error when requireAuth finds no key", () => {
     setup();
 
@@ -96,6 +112,7 @@ describe("config resolution", () => {
     vi.stubEnv("CONSOLE_API_URL", input.env?.CONSOLE_API_URL);
     vi.stubEnv("CONSOLE_PROVIDER_PROXY_URL", input.env?.CONSOLE_PROVIDER_PROXY_URL);
     vi.stubEnv("CONSOLE_NETWORK", input.env?.CONSOLE_NETWORK);
+    vi.stubEnv("CONSOLE_WEB_URL", input.env?.CONSOLE_WEB_URL);
 
     if (input.stored) {
       const path = configPath();

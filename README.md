@@ -93,6 +93,7 @@ console-axi uninstall             # removes them (and the binary; --no-self to k
 | API base URL | `CONSOLE_API_URL` | `baseUrl` | `https://console-api.akash.network` |
 | Provider proxy | `CONSOLE_PROVIDER_PROXY_URL` | `providerProxyUrl` | `https://console.akash.network/provider-proxy-%{NETWORK}` |
 | Network | `CONSOLE_NETWORK` | `network` | `mainnet` |
+| Console web URL | `CONSOLE_WEB_URL` | `consoleWebUrl` | `https://console.akash.network` |
 
 Precedence: env > stored config > defaults. `--url` overrides the base URL per invocation. `%{NETWORK}` in the provider-proxy URL is replaced with the resolved network (used by `logs`, `events`, `exec`, `shell`).
 
