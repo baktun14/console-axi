@@ -8,6 +8,7 @@ import { registerHome } from "./commands/home.js";
 import { registerJwt } from "./commands/jwt.js";
 import { registerBid, registerLease } from "./commands/market.js";
 import { registerProvider } from "./commands/provider.js";
+import { registerSdl } from "./commands/sdl.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerShell } from "./commands/shell.js";
 import { registerUsage, registerWallet } from "./commands/wallet.js";
@@ -35,6 +36,7 @@ function buildProgram(): Command {
   registerHome(program);
   registerAuth(program);
   registerSetup(program);
+  registerSdl(program);
   registerDeploy(program);
   registerDeployment(program);
   registerBid(program);

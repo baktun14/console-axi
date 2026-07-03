@@ -25,6 +25,22 @@ export CONSOLE_API_KEY=<key>
 console-axi whoami
 ```
 
+## Formulate an SDL
+
+Every deployment needs a valid [SDL](https://akash.network/docs/getting-started/stack-definition-language/) (the YAML that describes your app). The `sdl` commands help you scaffold, validate and price-check one **before** you deploy — validation runs entirely client-side (the Console API has no validate endpoint) via [`@akashnetwork/chain-sdk`](https://www.npmjs.com/package/@akashnetwork/chain-sdk) plus a few best-practice lint rules.
+
+```bash
+console-axi sdl templates                                   # list scaffolds: web, gpu, multi-service, ip-lease
+console-axi sdl init web --image nginx:1.27 --port 80 > app.yml   # generate SDL YAML (stdout)
+console-axi sdl validate app.yml                            # offline: schema + best-practice checks (exit 2 if invalid)
+console-axi sdl estimate app.yml                            # live: USD/mo vs AWS/GCP/Azure + matching providers (no key)
+console-axi deploy --sdl app.yml --deposit 5
+```
+
+`sdl init` common flags: `--image --port --as --cpu --memory --storage --count --price --env K=V` (plus `--gpu --gpu-model` for the `gpu` template). It prints raw YAML to stdout, so redirect to a file or pipe into `sdl validate -`.
+
+This is designed to be **agent-driven**: the packaged [Agent Skill](./skills/console-axi/SKILL.md) teaches an agent to interview the user and run this loop, so no interactive prompts are needed. `deploy`, `deployment create` and `deployment update` also validate the SDL client-side first (bypass with `--skip-validation`).
+
 ## Deploy in one command
 
 ```bash
@@ -40,6 +56,7 @@ Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <
 | Area | Commands |
 |------|----------|
 | Auth/config | `login`, `logout`, `whoami`, `setup` |
+| SDL | `sdl templates`, `sdl init <template>`, `sdl validate <file>`, `sdl estimate <file>` |
 | Deploy | `deploy` (composite) |
 | Deployments | `deployment list\|view\|status\|create\|update\|close\|deposit` |
 | Market | `bid list --dseq <dseq>`, `lease create ...` |
@@ -111,7 +128,13 @@ node dist/cli.js                      # home view ("not signed in")
 node dist/cli.js --help               # full command tree
 node dist/cli.js whoami; echo $?      # -> unauthorized, exit 1
 node dist/cli.js frobnicate; echo $?  # -> unknown command, exit 2
+
+node dist/cli.js sdl templates        # list SDL scaffolds
+node dist/cli.js sdl init web --image nginx:1.27 --port 80 | node dist/cli.js sdl validate -   # -> valid: true
+node dist/cli.js sdl validate examples/hello.yml           # offline validation + summary
 ```
+
+`sdl estimate <file>` also works without a key (it calls the public pricing and bid-screening endpoints).
 
 Run the real `console-axi` binary during development with `npm link`.
 
