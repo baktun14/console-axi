@@ -9,6 +9,7 @@ import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { blockPriceToUsdPerMonth } from "../output/price.js";
 import { printResult } from "../output/render.js";
+import { assertSdlValid } from "../sdl/validate.js";
 import { pollUntil } from "../util/poll.js";
 
 const BID_POLL_INTERVAL_MS = 3000;
@@ -23,10 +24,12 @@ export function registerDeploy(program: Command): void {
     .option("--accept <strategy>", "cheapest | first | <provider-address>", "cheapest")
     .option("--bid-timeout <seconds>", "max seconds to wait for bids", "90")
     .option("--timeout <seconds>", "max seconds to wait for the workload to become ready", "240")
+    .option("--skip-validation", "skip client-side SDL validation before creating the deployment")
     .action(
       action(async (opts: DeployOpts, command: Command) => {
         const { client } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
+        if (!opts.skipValidation) assertSdlValid(sdl);
         const deposit = Number(opts.deposit);
         if (!Number.isFinite(deposit) || deposit <= 0) {
           throw new AxiError({ code: "usage", message: `--deposit must be a positive USD amount, got "${opts.deposit}".` });
@@ -142,6 +145,7 @@ interface DeployOpts {
   accept: string;
   bidTimeout: string;
   timeout: string;
+  skipValidation?: boolean;
 }
 
 /** Build an error that keeps the deployment open and tells the agent how to recover. */
