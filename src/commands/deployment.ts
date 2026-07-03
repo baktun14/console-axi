@@ -15,6 +15,7 @@ import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { blockPriceToUsdPerMonth } from "../output/price.js";
 import { printResult } from "../output/render.js";
+import { assertSdlValid } from "../sdl/validate.js";
 
 function parseUsd(value: string, flag: string): number {
   const n = Number(value);
@@ -153,10 +154,12 @@ export function registerDeployment(program: Command): void {
     .description("Create a deployment on-chain (managed wallet signs server-side)")
     .requiredOption("--sdl <file|->", "SDL YAML file path, or - for stdin")
     .requiredOption("--deposit <usd>", "deposit amount in USD (e.g. 5)")
+    .option("--skip-validation", "skip client-side SDL validation before creating the deployment")
     .action(
-      action(async (opts: { sdl: string; deposit: string }, command: Command) => {
+      action(async (opts: { sdl: string; deposit: string; skipValidation?: boolean }, command: Command) => {
         const { client } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
+        if (!opts.skipValidation) assertSdlValid(sdl);
         const deposit = parseUsd(opts.deposit, "--deposit");
         const data = unwrap(await client.POST("/v1/deployments", { body: { data: { sdl, deposit } } })).data;
         // Cache the manifest so `lease create` can send it without a manual arg.
@@ -177,10 +180,12 @@ export function registerDeployment(program: Command): void {
     .command("update <dseq>")
     .description("Update a deployment's SDL")
     .requiredOption("--sdl <file|->", "new SDL YAML file path, or - for stdin")
+    .option("--skip-validation", "skip client-side SDL validation before updating the deployment")
     .action(
-      action(async (dseq: string, opts: { sdl: string }, command: Command) => {
+      action(async (dseq: string, opts: { sdl: string; skipValidation?: boolean }, command: Command) => {
         const { client } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
+        if (!opts.skipValidation) assertSdlValid(sdl);
         unwrap(await client.PUT("/v1/deployments/{dseq}", { params: { path: { dseq } }, body: { data: { sdl } } }), {
           dseq
         });

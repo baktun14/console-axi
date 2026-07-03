@@ -1,6 +1,6 @@
 ---
 name: console-axi
-description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
+description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate an Akash SDL", "estimate Akash cost", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
 ---
 
 # console-axi
@@ -26,6 +26,42 @@ Set a key once. Get it from the Console web UI (/user/api-keys) or `apikey creat
 console-axi login --with-key <key>     # or export CONSOLE_API_KEY=<key>
 console-axi whoami
 ```
+
+## Building a valid SDL
+
+Every deployment needs a valid SDL (the YAML describing your app). You act as the
+wizard: interview the user, scaffold an SDL, then validate and price-check it
+before deploying — never hand a half-formed SDL to `deploy`.
+
+Ask only what you don't already know, roughly in this order:
+
+1. What are you deploying? (web service, GPU/ML workload, app + database, or something needing a dedicated public IP)
+2. Container image **and tag**? An explicit tag is required — never `:latest`.
+3. Which port does it listen on, and should it be reachable from the internet?
+4. Resources: CPU cores, memory, disk. GPU? which model (e.g. a100, h100)?
+5. Persistent storage (database, uploads)? how much?
+6. Replica count? Region/provider constraints? Rough monthly budget?
+
+Then run the loop:
+
+```
+console-axi sdl templates                                   # list scaffolds
+console-axi sdl init web --image nginx:1.27 --port 80 > app.yml
+console-axi sdl validate app.yml                            # offline: schema + best-practice checks
+console-axi sdl estimate app.yml                            # live: USD/mo (vs AWS/GCP/Azure) + matching providers
+console-axi deploy --sdl app.yml --deposit 5
+```
+
+`sdl init <template>` prints raw SDL YAML to stdout — redirect it to a file or pipe
+into `sdl validate -`. Templates: `web`, `gpu`, `multi-service`, `ip-lease`. Common
+flags: `--image --port --as --cpu --memory --storage --count --price --env K=V`
+(plus `--gpu --gpu-model` for the `gpu` template).
+
+`sdl validate` exits 2 on an invalid SDL and lists each problem with a fix hint;
+edit the SDL and re-run until it passes. `sdl estimate` needs no API key.
+
+`deploy`, `deployment create` and `deployment update` validate the SDL client-side
+first and refuse to broadcast an invalid one; pass `--skip-validation` to override.
 
 ## The fast path: deploy
 
