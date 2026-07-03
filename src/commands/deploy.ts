@@ -7,6 +7,7 @@ import { saveManifest } from "../deploy/manifest-store.js";
 import { type BidLike, parseAcceptStrategy, selectBids } from "../deploy/select-bids.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
+import { consoleDeploymentUrl } from "../output/console-url.js";
 import { blockPriceToUsdPerMonth } from "../output/price.js";
 import { printResult } from "../output/render.js";
 import { assertSdlValid } from "../sdl/validate.js";
@@ -27,7 +28,7 @@ export function registerDeploy(program: Command): void {
     .option("--skip-validation", "skip client-side SDL validation before creating the deployment")
     .action(
       action(async (opts: DeployOpts, command: Command) => {
-        const { client } = authedContext(command);
+        const { client, config } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
         if (!opts.skipValidation) assertSdlValid(sdl);
         const deposit = Number(opts.deposit);
@@ -113,6 +114,7 @@ export function registerDeploy(program: Command): void {
           printResult(
             {
               dseq,
+              console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
               state: "lease created, not ready yet",
               providers,
               cost: blockPriceToUsdPerMonth(totalPerBlock),
@@ -129,6 +131,7 @@ export function registerDeploy(program: Command): void {
           {
             ok: true,
             dseq,
+            console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
             providers,
             cost: blockPriceToUsdPerMonth(totalPerBlock),
             uris: uris.length > 0 ? uris : "no external URIs (internal-only services)"
