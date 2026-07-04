@@ -41,6 +41,7 @@ console-axi sdl templates                                   # list scaffolds
 console-axi sdl init web --image nginx:1.27 --port 80 > app.yml
 console-axi sdl validate app.yml                            # offline: schema + best-practice checks
 console-axi sdl estimate app.yml                            # live: USD/mo (vs AWS/GCP/Azure) + matching providers
+console-axi sdl screen app.yml                              # live: which providers could bid (probe supply)
 console-axi deploy --sdl app.yml --deposit 5
 ```
 
@@ -50,10 +51,16 @@ flags: `--image --port --as --cpu --memory --storage --count --price --env K=V`
 (plus `--gpu --gpu-model` for the `gpu` template).
 
 `sdl validate` exits 2 on an invalid SDL and lists each problem with a fix hint;
-edit the SDL and re-run until it passes. `sdl estimate` needs no API key.
+edit the SDL and re-run until it passes. `sdl estimate` and `sdl screen` need no API key.
+
+`sdl screen` probes the network's real-time supply and lists the providers whose
+inventory could match the SDL (with region, org, audit status, 7-day downtime). It is
+advisory only — providers may run custom bid scripts, so a match is not a guaranteed bid.
 
 `deploy`, `deployment create` and `deployment update` validate the SDL client-side
 first and refuse to broadcast an invalid one; pass `--skip-validation` to override.
+`deploy` also runs `sdl screen` up front and aborts before spending the deposit when
+zero providers match; pass `--skip-screening` to override (a screening outage never blocks).
 
 ## The fast path: deploy
 

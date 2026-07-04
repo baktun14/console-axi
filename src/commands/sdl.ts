@@ -6,7 +6,8 @@ import { AxiError, EXIT } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { formatUsd } from "../output/price.js";
 import { printResult } from "../output/render.js";
-import { deriveResources, type ScreeningResource } from "../sdl/resources.js";
+import { deriveResources } from "../sdl/resources.js";
+import { screenSupply, summarizeIncidents } from "../sdl/screen.js";
 import { toYaml } from "../sdl/serialize.js";
 import { summarizeSdl } from "../sdl/summary.js";
 import { getTemplate, listTemplates } from "../sdl/templates/registry.js";
@@ -21,6 +22,7 @@ export function registerSdl(program: Command): void {
   registerInit(sdl);
   registerValidate(sdl);
   registerEstimate(sdl);
+  registerScreen(sdl);
 }
 
 function registerTemplates(sdl: Command): void {
@@ -113,7 +115,7 @@ function registerEstimate(sdl: Command): void {
           });
         }
 
-        const { pricing, screening } = deriveResources(parsed);
+        const { pricing } = deriveResources(parsed);
         const { client } = anonContext(command);
 
         const priceData = unwrap(await client.POST("/v1/pricing", { body: pricing }));
@@ -132,7 +134,7 @@ function registerEstimate(sdl: Command): void {
               memory: bytesToHuman(pricing.memory),
               storage: bytesToHuman(pricing.storage)
             },
-            providers: await screenProviders(client, parsed, screening)
+            providers: await estimateProviders(client, parsed)
           },
           { help: [`console-axi deploy --sdl ${file} --deposit <usd>`] }
         );
@@ -140,22 +142,58 @@ function registerEstimate(sdl: Command): void {
     );
 }
 
-/** Bid-screening is a best-effort extra: on any failure, note it rather than failing the estimate. */
-async function screenProviders(
-  client: ReturnType<typeof anonContext>["client"],
-  sdl: SdlDoc,
-  screening: ScreeningResource[]
-): Promise<number | string> {
+/** Bid-screening is a best-effort extra for `estimate`: on any failure, note it rather than failing the estimate. */
+async function estimateProviders(client: ReturnType<typeof anonContext>["client"], sdl: SdlDoc): Promise<number | string> {
   try {
-    const data = unwrap(
-      await client.POST("/v1/bid-screening", {
-        body: { requirements: buildRequirements(sdl), resources: screening, timezone: systemTimezone() }
-      })
-    ) as { providers?: unknown[] };
-    return data.providers?.length ?? 0;
+    return (await screenSupply(client, sdl)).length;
   } catch (e) {
     return e instanceof AxiError ? `screening unavailable: ${e.message}` : "screening unavailable";
   }
+}
+
+function registerScreen(sdl: Command): void {
+  sdl
+    .command("screen <file>")
+    .description("Probe the network for providers that could bid on an SDL, before deploying (use - for stdin)")
+    .option("--reclamation-window <seconds>", "only consider providers with a reclamation window >= this many seconds")
+    .action(
+      action(async (file: string, opts: { reclamationWindow?: string }, command: Command) => {
+        const { valid, errors, parsed } = validateSdl(readFileOrStdin(file));
+        if (!valid || !parsed) {
+          throw new AxiError({
+            code: "usage",
+            message: `SDL is invalid: ${errors.map((e) => e.message).join("; ")}`,
+            help: [`console-axi sdl validate ${file}`]
+          });
+        }
+
+        const reclamationWindow =
+          opts.reclamationWindow !== undefined ? parseIntFlag(opts.reclamationWindow, "--reclamation-window") : undefined;
+
+        const { client } = anonContext(command);
+        const matched = await screenSupply(client, parsed, { reclamationWindow });
+
+        const providers = matched.map((p) => ({
+          owner: p.owner,
+          location: p.location ?? "unknown",
+          organization: p.organization ?? "unknown",
+          audited: p.isAudited,
+          ...summarizeIncidents(p.incidents)
+        }));
+
+        printResult(
+          {
+            count: `${matched.length} matching`,
+            providers,
+            note:
+              matched.length > 0
+                ? "Advisory only — providers may run custom bid scripts, so a match does not guarantee a bid."
+                : "No providers currently match. Try relaxing placement attributes or signedBy in the SDL."
+          },
+          { help: [`console-axi deploy --sdl ${file} --deposit <usd>`] }
+        );
+      })
+    );
 }
 
 interface Estimate {
@@ -170,33 +208,6 @@ function firstEstimate(data: unknown): Estimate {
   const entry = Array.isArray(data) ? data[0] : data;
   const e = (entry ?? {}) as Partial<Estimate>;
   return { akash: e.akash ?? 0, aws: e.aws ?? 0, gcp: e.gcp ?? 0, azure: e.azure ?? 0 };
-}
-
-function buildRequirements(sdl: SdlDoc): { signedBy?: { anyOf: string[]; allOf: string[] }; attributes?: Array<{ key: string; value: string }> } {
-  const attributes: Array<{ key: string; value: string }> = [];
-  let signedBy: { anyOf: string[]; allOf: string[] } | undefined;
-
-  for (const placement of Object.values(sdl.profiles?.placement ?? {})) {
-    for (const [key, value] of Object.entries(placement.attributes ?? {})) {
-      attributes.push({ key, value: String(value) });
-    }
-    if (!signedBy && placement.signedBy) {
-      signedBy = { anyOf: placement.signedBy.anyOf ?? [], allOf: placement.signedBy.allOf ?? [] };
-    }
-  }
-
-  const req: { signedBy?: { anyOf: string[]; allOf: string[] }; attributes?: Array<{ key: string; value: string }> } = {};
-  if (signedBy) req.signedBy = signedBy;
-  if (attributes.length > 0) req.attributes = attributes;
-  return req;
-}
-
-function systemTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
 }
 
 // ---- option parsing -------------------------------------------------------
