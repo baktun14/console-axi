@@ -206,6 +206,7 @@ function registerScreen(sdl: Command): void {
 
         const providers = matched.map((p) => ({
           owner: p.owner,
+          hostUri: p.hostUri,
           location: p.location ?? "unknown",
           organization: p.organization ?? "unknown",
           audited: p.isAudited,
