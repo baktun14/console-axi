@@ -1,12 +1,9 @@
 import type { Command } from "commander";
 
-import { unwrap } from "../api/client.js";
 import { action, anonContext } from "../context.js";
 import { AxiError, EXIT } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
-import { formatUsd } from "../output/price.js";
 import { printResult } from "../output/render.js";
-import { deriveResources, type ScreeningResource } from "../sdl/resources.js";
 import { buildRequirements, type ScreenRequirements, screenSupply, summarizeIncidents } from "../sdl/screen.js";
 import { toYaml } from "../sdl/serialize.js";
 import { summarizeSdl } from "../sdl/summary.js";
@@ -17,12 +14,11 @@ import type { SdlDoc } from "../sdl/types.js";
 import { validateSdl } from "../sdl/validate.js";
 
 export function registerSdl(program: Command): void {
-  const sdl = program.command("sdl").description("Formulate, validate and price-check deployment SDLs");
+  const sdl = program.command("sdl").description("Formulate, validate and probe deployment SDLs");
 
   registerTemplates(sdl);
   registerInit(sdl);
   registerValidate(sdl);
-  registerEstimate(sdl);
   registerScreen(sdl);
 }
 
@@ -91,7 +87,7 @@ function registerValidate(sdl: Command): void {
         if (valid && parsed) {
           printResult(
             { valid: true, summary: summarizeSdl(parsed) },
-            { help: [`console-axi sdl estimate ${file}`, `console-axi deploy --sdl ${file} --deposit <usd>`] }
+            { help: [`console-axi sdl screen ${file}`, `console-axi deploy --sdl ${file} --deposit <usd>`] }
           );
           return;
         }
@@ -99,66 +95,6 @@ function registerValidate(sdl: Command): void {
         process.exitCode = EXIT.USAGE;
       })
     );
-}
-
-function registerEstimate(sdl: Command): void {
-  sdl
-    .command("estimate <file>")
-    .description("Estimate monthly cost and provider availability for an SDL (use - for stdin)")
-    .action(
-      action(async (file: string, _opts: unknown, command: Command) => {
-        const { valid, errors, parsed } = validateSdl(readFileOrStdin(file));
-        if (!valid || !parsed) {
-          throw new AxiError({
-            code: "usage",
-            message: `SDL is invalid: ${errors.map((e) => e.message).join("; ")}`,
-            help: [`console-axi sdl validate ${file}`]
-          });
-        }
-
-        // Derive resources once; both the pricing and screening calls consume them.
-        const { pricing, screening } = deriveResources(parsed);
-        const { client } = anonContext(command);
-
-        // Pricing and bid-screening are independent — run them concurrently.
-        const [priceData, providers] = await Promise.all([
-          client.POST("/v1/pricing", { body: pricing }).then(unwrap),
-          estimateProviders(client, parsed, screening)
-        ]);
-        const price = firstEstimate(priceData);
-
-        printResult(
-          {
-            cost: {
-              akash: `${formatUsd(price.akash)}/mo`,
-              aws: `${formatUsd(price.aws)}/mo`,
-              gcp: `${formatUsd(price.gcp)}/mo`,
-              azure: `${formatUsd(price.azure)}/mo`
-            },
-            resources: {
-              cpu: `${pricing.cpu / 1000} cores`,
-              memory: bytesToHuman(pricing.memory),
-              storage: bytesToHuman(pricing.storage)
-            },
-            providers
-          },
-          { help: [`console-axi deploy --sdl ${file} --deposit <usd>`] }
-        );
-      })
-    );
-}
-
-/** Bid-screening is a best-effort extra for `estimate`: on any failure, note it rather than failing the estimate. */
-async function estimateProviders(
-  client: ReturnType<typeof anonContext>["client"],
-  sdl: SdlDoc,
-  resources: ScreeningResource[]
-): Promise<number | string> {
-  try {
-    return (await screenSupply(client, sdl, { resources })).length;
-  } catch (e) {
-    return e instanceof AxiError ? `screening unavailable: ${e.message}` : "screening unavailable";
-  }
 }
 
 function registerScreen(sdl: Command): void {
@@ -298,20 +234,6 @@ function mergeRequirements(base: ScreenRequirements, attributes: string[], signe
   return req;
 }
 
-interface Estimate {
-  akash: number;
-  aws: number;
-  gcp: number;
-  azure: number;
-}
-
-/** The pricing endpoint returns a single estimate for a single spec, or an array for an array of specs. */
-function firstEstimate(data: unknown): Estimate {
-  const entry = Array.isArray(data) ? data[0] : data;
-  const e = (entry ?? {}) as Partial<Estimate>;
-  return { akash: e.akash ?? 0, aws: e.aws ?? 0, gcp: e.gcp ?? 0, azure: e.azure ?? 0 };
-}
-
 // ---- option parsing -------------------------------------------------------
 
 interface RawInitOptions {
@@ -375,16 +297,4 @@ function collectKeyValue(value: string, previous: string[]): string[] {
 
 function collectValue(value: string, previous: string[]): string[] {
   return [...previous, value];
-}
-
-function bytesToHuman(bytes: number): string {
-  const GiB = 1024 ** 3;
-  const MiB = 1024 ** 2;
-  if (bytes >= GiB) return `${round(bytes / GiB)}Gi`;
-  if (bytes >= MiB) return `${round(bytes / MiB)}Mi`;
-  return `${bytes}B`;
-}
-
-function round(n: number): number {
-  return Math.round(n * 100) / 100;
 }

@@ -19,7 +19,7 @@ export interface ScreenRequirements {
  * bid-screening endpoint which providers could bid, and return them. Advisory
  * only — providers may run custom bid scripts, so a match is not a guarantee.
  * Throws (translated AxiError) on transport/HTTP failure; callers decide whether
- * that is fatal (`sdl screen`) or best-effort (`sdl estimate`, `deploy`).
+ * that is fatal (`sdl screen`) or best-effort (`deploy`).
  *
  * Pass `opts.resources` to reuse an already-derived screening spec and skip a
  * redundant manifest generation; pass `opts.requirements` to override the
@@ -30,7 +30,7 @@ export async function screenSupply(
   sdl: SdlDoc,
   opts: { reclamationWindow?: number; resources?: ScreeningResource[]; requirements?: ScreenRequirements } = {}
 ): Promise<ScreenedProvider[]> {
-  const screening = opts.resources ?? deriveResources(sdl).screening;
+  const screening = opts.resources ?? deriveResources(sdl);
   const data = unwrap(
     await client.POST("/v1/bid-screening", {
       body: {

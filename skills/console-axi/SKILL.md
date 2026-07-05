@@ -40,7 +40,6 @@ Then run the loop:
 console-axi sdl templates                                   # list scaffolds
 console-axi sdl init web --image nginx:1.27 --port 80 > app.yml
 console-axi sdl validate app.yml                            # offline: schema + best-practice checks
-console-axi sdl estimate app.yml                            # live: USD/mo (vs AWS/GCP/Azure) + matching providers
 console-axi sdl screen app.yml                              # live: which providers could bid (probe supply)
 console-axi deploy --sdl app.yml --deposit 5
 ```
@@ -51,7 +50,7 @@ flags: `--image --port --as --cpu --memory --storage --count --price --env K=V`
 (plus `--gpu --gpu-model` for the `gpu` template).
 
 `sdl validate` exits 2 on an invalid SDL and lists each problem with a fix hint;
-edit the SDL and re-run until it passes. `sdl estimate` and `sdl screen` need no API key.
+edit the SDL and re-run until it passes. `sdl screen` needs no API key.
 
 `sdl screen` probes the network's real-time supply and lists the providers whose
 inventory could match (with region, org, audit status, 7-day downtime). It is advisory
