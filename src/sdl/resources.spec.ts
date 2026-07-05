@@ -33,18 +33,8 @@ deployment:
     dcloud: { profile: web, count: 2 }`;
 
 describe("deriveResources", () => {
-  it("aggregates cpu (thousandths), memory and storage bytes across replicas", () => {
-    const { pricing } = deriveResources(parse(WEB_COUNT_2));
-    // 0.5 core -> 500 thousandths, x2 replicas
-    expect(pricing.cpu).toBe(1000);
-    // 512Mi -> 536870912 bytes, x2
-    expect(pricing.memory).toBe(512 * 1024 * 1024 * 2);
-    // 1Gi -> 1073741824 bytes, x2
-    expect(pricing.storage).toBe(1024 * 1024 * 1024 * 2);
-  });
-
   it("builds one screening resource per service with decoded string vals, count and price", () => {
-    const { screening } = deriveResources(parse(WEB_COUNT_2));
+    const screening = deriveResources(parse(WEB_COUNT_2));
     expect(screening).toHaveLength(1);
     const entry = screening[0]!;
     expect(entry.count).toBe(2);
@@ -59,7 +49,7 @@ describe("deriveResources", () => {
       "storage: { size: 1Gi }",
       "storage: { size: 1Gi }\n        gpu:\n          units: 1\n          attributes:\n            vendor:\n              nvidia:\n                - model: a100"
     ));
-    const { screening } = deriveResources(gpu);
+    const screening = deriveResources(gpu);
     expect(screening[0]!.resource.gpu.units.val).toBe("1");
     expect(screening[0]!.resource.gpu.attributes).toContainEqual({ key: "vendor/nvidia/model/a100", value: "true" });
   });

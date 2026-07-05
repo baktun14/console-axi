@@ -50,10 +50,11 @@ export function validateSdl(yaml: string): SdlValidation {
 
   if (Array.isArray(schemaErrors)) {
     for (const err of schemaErrors as SchemaError[]) {
+      const hint = hintFor(err);
       issues.push({
         path: err.instancePath && err.instancePath.length > 0 ? err.instancePath : "(root)",
         message: err.message ?? "Invalid SDL.",
-        ...(hintFor(err) ? { hint: hintFor(err) } : {})
+        ...(hint ? { hint } : {})
       });
     }
   }
@@ -67,9 +68,9 @@ export function validateSdl(yaml: string): SdlValidation {
  * Validate before an expensive API call; throw a usage error if invalid so an
  * agent never spends a deposit on an SDL that cannot deploy.
  */
-export function assertSdlValid(yaml: string): void {
-  const { valid, errors } = validateSdl(yaml);
-  if (valid) return;
+export function assertSdlValid(yaml: string): SdlDoc | undefined {
+  const { valid, errors, parsed } = validateSdl(yaml);
+  if (valid) return parsed;
   const shown = errors.slice(0, 5).map((e) => `${e.path}: ${e.message}`).join(" | ");
   const more = errors.length > 5 ? ` (+${errors.length - 5} more)` : "";
   throw new AxiError({
