@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:bin": "sh scripts/build-bin.sh",
     "dev": "tsup --watch",
     "gen:api": "tsx scripts/gen-api.ts",
     "gen:skill": "tsx scripts/gen-skill.ts",
@@ -33,6 +34,12 @@
     "toon",
     "deploy"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baktun14/console-axi.git"
+  },
+  "homepage": "https://github.com/baktun14/console-axi#readme",
+  "bugs": "https://github.com/baktun14/console-axi/issues",
   "license": "Apache-2.0",
   "dependencies": {
     "@toon-format/toon": "^2.3.0",
