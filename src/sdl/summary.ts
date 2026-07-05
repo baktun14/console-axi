@@ -22,7 +22,7 @@ export function summarizeSdl(sdl: SdlDoc): SdlSummary {
   let totalPerBlock = 0;
 
   for (const [name, svc] of Object.entries(sdl.services ?? {})) {
-    const target = firstTarget(sdl, name);
+    const [placementName, target] = firstPlacement(sdl, name) ?? [];
     const profileName = target?.profile ?? name;
     const count = target?.count ?? 1;
     const resources = sdl.profiles?.compute?.[profileName]?.resources;
@@ -35,7 +35,7 @@ export function summarizeSdl(sdl: SdlDoc): SdlSummary {
       count
     });
 
-    const amount = priceAmount(sdl, name);
+    const amount = placementName && target?.profile ? priceAmount(sdl, placementName, target.profile) : undefined;
     if (amount !== undefined) totalPerBlock += amount * count;
   }
 
@@ -46,19 +46,14 @@ export function summarizeSdl(sdl: SdlDoc): SdlSummary {
   };
 }
 
-function firstTarget(sdl: SdlDoc, service: string) {
+/** The service's first `deployment` entry as `[placementName, target]`, if any. */
+function firstPlacement(sdl: SdlDoc, service: string) {
   const placements = sdl.deployment?.[service];
-  if (!placements) return undefined;
-  const first = Object.values(placements)[0];
-  return first;
+  return placements ? Object.entries(placements)[0] : undefined;
 }
 
-function priceAmount(sdl: SdlDoc, service: string): number | undefined {
-  const placements = sdl.deployment?.[service];
-  if (!placements) return undefined;
-  const [placementName, target] = Object.entries(placements)[0] ?? [];
-  if (!placementName || !target?.profile) return undefined;
-  const raw = sdl.profiles?.placement?.[placementName]?.pricing?.[target.profile]?.amount;
+function priceAmount(sdl: SdlDoc, placementName: string, profile: string): number | undefined {
+  const raw = sdl.profiles?.placement?.[placementName]?.pricing?.[profile]?.amount;
   const n = typeof raw === "string" ? Number(raw) : raw;
   return typeof n === "number" && Number.isFinite(n) ? n : undefined;
 }

@@ -91,25 +91,31 @@ export function deriveResources(sdl: SdlDoc): DerivedResources {
       const count = countFor(sdl, svc.name, group.name);
       const price = priceFor(sdl, svc.name, group.name);
 
-      const cpuVal = Number(decodeVal(r.cpu.units.val)) || 0;
-      const memVal = Number(decodeVal(r.memory.quantity.val)) || 0;
-      const storageVals = (r.storage ?? []).map((s) => Number(decodeVal(s.quantity.val)) || 0);
-      const storageTotal = storageVals.reduce((a, b) => a + b, 0);
+      // Decode each `val` once, then reuse for both the totals and the screening spec.
+      const cpuStr = decodeVal(r.cpu.units.val);
+      const memStr = decodeVal(r.memory.quantity.val);
+      const gpuStr = decodeVal(r.gpu.units.val);
+      const decodedStorage = (r.storage ?? []).map((s) => ({
+        name: s.name,
+        val: decodeVal(s.quantity.val),
+        attributes: s.attributes ?? []
+      }));
+      const storageTotal = decodedStorage.reduce((a, s) => a + (Number(s.val) || 0), 0);
 
-      cpu += cpuVal * count;
-      memory += memVal * count;
+      cpu += (Number(cpuStr) || 0) * count;
+      memory += (Number(memStr) || 0) * count;
       storage += storageTotal * count;
 
       screening.push({
         resource: {
           id: r.id ?? 1,
-          cpu: { units: { val: decodeVal(r.cpu.units.val) }, attributes: r.cpu.attributes ?? [] },
-          memory: { quantity: { val: decodeVal(r.memory.quantity.val) }, attributes: r.memory.attributes ?? [] },
-          gpu: { units: { val: decodeVal(r.gpu.units.val) }, attributes: r.gpu.attributes ?? [] },
-          storage: (r.storage ?? []).map((s) => ({
+          cpu: { units: { val: cpuStr }, attributes: r.cpu.attributes ?? [] },
+          memory: { quantity: { val: memStr }, attributes: r.memory.attributes ?? [] },
+          gpu: { units: { val: gpuStr }, attributes: r.gpu.attributes ?? [] },
+          storage: decodedStorage.map((s) => ({
             name: s.name,
-            quantity: { val: decodeVal(s.quantity.val) },
-            attributes: s.attributes ?? []
+            quantity: { val: s.val },
+            attributes: s.attributes
           }))
         },
         count,

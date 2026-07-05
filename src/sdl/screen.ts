@@ -1,6 +1,6 @@
 import { type ApiClient, unwrap } from "../api/client.js";
 import type { operations } from "../api/schema.js";
-import { deriveResources } from "./resources.js";
+import { deriveResources, type ScreeningResource } from "./resources.js";
 import type { SdlDoc } from "./types.js";
 
 /** A provider returned by POST /v1/bid-screening. Derived from the generated schema to stay in sync. */
@@ -9,7 +9,7 @@ export type ScreenedProvider =
 
 type Incident = ScreenedProvider["incidents"][number];
 
-interface ScreenRequirements {
+export interface ScreenRequirements {
   signedBy?: { anyOf: string[]; allOf: string[] };
   attributes?: Array<{ key: string; value: string }>;
 }
@@ -20,17 +20,21 @@ interface ScreenRequirements {
  * only — providers may run custom bid scripts, so a match is not a guarantee.
  * Throws (translated AxiError) on transport/HTTP failure; callers decide whether
  * that is fatal (`sdl screen`) or best-effort (`sdl estimate`, `deploy`).
+ *
+ * Pass `opts.resources` to reuse an already-derived screening spec and skip a
+ * redundant manifest generation; pass `opts.requirements` to override the
+ * placement requirements derived from the SDL (e.g. from CLI flags).
  */
 export async function screenSupply(
   client: ApiClient,
   sdl: SdlDoc,
-  opts: { reclamationWindow?: number } = {}
+  opts: { reclamationWindow?: number; resources?: ScreeningResource[]; requirements?: ScreenRequirements } = {}
 ): Promise<ScreenedProvider[]> {
-  const { screening } = deriveResources(sdl);
+  const screening = opts.resources ?? deriveResources(sdl).screening;
   const data = unwrap(
     await client.POST("/v1/bid-screening", {
       body: {
-        requirements: buildRequirements(sdl),
+        requirements: opts.requirements ?? buildRequirements(sdl),
         resources: screening,
         timezone: systemTimezone(),
         ...(opts.reclamationWindow !== undefined ? { reclamationWindow: opts.reclamationWindow } : {})

@@ -63,8 +63,20 @@ flags: \`--image --port --as --cpu --memory --storage --count --price --env K=V\
 edit the SDL and re-run until it passes. \`sdl estimate\` and \`sdl screen\` need no API key.
 
 \`sdl screen\` probes the network's real-time supply and lists the providers whose
-inventory could match the SDL (with region, org, audit status, 7-day downtime). It is
-advisory only — providers may run custom bid scripts, so a match is not a guaranteed bid.
+inventory could match (with region, org, audit status, 7-day downtime). It is advisory
+only — providers may run custom bid scripts, so a match is not a guaranteed bid. It takes
+an SDL, resource flags, or both:
+
+\`\`\`
+console-axi sdl screen app.yml                              # from an SDL
+console-axi sdl screen --cpu 4 --memory 8Gi --gpu 1 --gpu-model a100   # no SDL: probe raw resources
+console-axi sdl screen app.yml --memory 32Gi                # override the SDL's resources
+console-axi sdl screen --cpu 1 --memory 1Gi --attribute region=us-west --signed-by <auditor>
+\`\`\`
+
+Flags: \`--cpu --memory --storage --gpu --gpu-model --count\` (resources), \`--attribute K=V\`
+and \`--signed-by <addr>\` (repeatable placement filters), \`--reclamation-window <seconds>\`.
+When flags and a file are combined, the flags override the SDL's resources/requirements.
 
 \`deploy\`, \`deployment create\` and \`deployment update\` validate the SDL client-side
 first and refuse to broadcast an invalid one; pass \`--skip-validation\` to override.

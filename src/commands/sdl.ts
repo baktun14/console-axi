@@ -6,10 +6,11 @@ import { AxiError, EXIT } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { formatUsd } from "../output/price.js";
 import { printResult } from "../output/render.js";
-import { deriveResources } from "../sdl/resources.js";
-import { screenSupply, summarizeIncidents } from "../sdl/screen.js";
+import { deriveResources, type ScreeningResource } from "../sdl/resources.js";
+import { buildRequirements, type ScreenRequirements, screenSupply, summarizeIncidents } from "../sdl/screen.js";
 import { toYaml } from "../sdl/serialize.js";
 import { summarizeSdl } from "../sdl/summary.js";
+import { cpuUnits } from "../sdl/templates/common.js";
 import { getTemplate, listTemplates } from "../sdl/templates/registry.js";
 import type { InitOptions } from "../sdl/templates/types.js";
 import type { SdlDoc } from "../sdl/types.js";
@@ -115,10 +116,15 @@ function registerEstimate(sdl: Command): void {
           });
         }
 
-        const { pricing } = deriveResources(parsed);
+        // Derive resources once; both the pricing and screening calls consume them.
+        const { pricing, screening } = deriveResources(parsed);
         const { client } = anonContext(command);
 
-        const priceData = unwrap(await client.POST("/v1/pricing", { body: pricing }));
+        // Pricing and bid-screening are independent — run them concurrently.
+        const [priceData, providers] = await Promise.all([
+          client.POST("/v1/pricing", { body: pricing }).then(unwrap),
+          estimateProviders(client, parsed, screening)
+        ]);
         const price = firstEstimate(priceData);
 
         printResult(
@@ -134,7 +140,7 @@ function registerEstimate(sdl: Command): void {
               memory: bytesToHuman(pricing.memory),
               storage: bytesToHuman(pricing.storage)
             },
-            providers: await estimateProviders(client, parsed)
+            providers
           },
           { help: [`console-axi deploy --sdl ${file} --deposit <usd>`] }
         );
@@ -143,9 +149,13 @@ function registerEstimate(sdl: Command): void {
 }
 
 /** Bid-screening is a best-effort extra for `estimate`: on any failure, note it rather than failing the estimate. */
-async function estimateProviders(client: ReturnType<typeof anonContext>["client"], sdl: SdlDoc): Promise<number | string> {
+async function estimateProviders(
+  client: ReturnType<typeof anonContext>["client"],
+  sdl: SdlDoc,
+  resources: ScreeningResource[]
+): Promise<number | string> {
   try {
-    return (await screenSupply(client, sdl)).length;
+    return (await screenSupply(client, sdl, { resources })).length;
   } catch (e) {
     return e instanceof AxiError ? `screening unavailable: ${e.message}` : "screening unavailable";
   }
@@ -153,25 +163,46 @@ async function estimateProviders(client: ReturnType<typeof anonContext>["client"
 
 function registerScreen(sdl: Command): void {
   sdl
-    .command("screen <file>")
-    .description("Probe the network for providers that could bid on an SDL, before deploying (use - for stdin)")
+    .command("screen [file]")
+    .description("Probe the network for providers that could bid, from an SDL and/or resource flags (use - for stdin)")
+    .option("--cpu <units>", "cpu units, e.g. 0.5 or 500m")
+    .option("--memory <size>", "memory size, e.g. 512Mi, 2Gi")
+    .option("--storage <size>", "storage size, e.g. 1Gi")
+    .option("--gpu <n>", "gpu units")
+    .option("--gpu-model <model>", "nvidia gpu model, e.g. a100")
+    .option("--count <n>", "replica count")
+    .option("--attribute <k=v>", "required placement attribute (repeatable)", collectKeyValue, [])
+    .option("--signed-by <auditor>", "required auditor address (repeatable)", collectValue, [])
     .option("--reclamation-window <seconds>", "only consider providers with a reclamation window >= this many seconds")
     .action(
-      action(async (file: string, opts: { reclamationWindow?: string }, command: Command) => {
-        const { valid, errors, parsed } = validateSdl(readFileOrStdin(file));
-        if (!valid || !parsed) {
+      action(async (file: string | undefined, opts: RawScreenOptions, command: Command) => {
+        const initOpts = toInitOptions({ ...opts, env: [] });
+        const hasResourceFlags =
+          opts.cpu !== undefined ||
+          opts.memory !== undefined ||
+          opts.storage !== undefined ||
+          opts.gpu !== undefined ||
+          opts.gpuModel !== undefined ||
+          opts.count !== undefined;
+
+        if (!file && !hasResourceFlags) {
           throw new AxiError({
             code: "usage",
-            message: `SDL is invalid: ${errors.map((e) => e.message).join("; ")}`,
-            help: [`console-axi sdl validate ${file}`]
+            message: "Provide an SDL file or resource flags (e.g. --cpu 2 --memory 4Gi) to screen.",
+            help: ["console-axi sdl screen app.yml", "console-axi sdl screen --cpu 2 --memory 4Gi --gpu 1 --gpu-model a100"]
           });
         }
 
+        // Resources: from the SDL, from flags alone (no file), or the SDL overridden by flags.
+        const parsed = file ? loadValidSdl(file) : synthesizeSdl(initOpts);
+        if (file && hasResourceFlags) applyResourceOverrides(parsed, initOpts);
+
+        const requirements = mergeRequirements(buildRequirements(parsed), opts.attribute, opts.signedBy);
         const reclamationWindow =
           opts.reclamationWindow !== undefined ? parseIntFlag(opts.reclamationWindow, "--reclamation-window") : undefined;
 
         const { client } = anonContext(command);
-        const matched = await screenSupply(client, parsed, { reclamationWindow });
+        const matched = await screenSupply(client, parsed, { reclamationWindow, requirements });
 
         const providers = matched.map((p) => ({
           owner: p.owner,
@@ -181,6 +212,9 @@ function registerScreen(sdl: Command): void {
           ...summarizeIncidents(p.incidents)
         }));
 
+        const deployHelp = file
+          ? `console-axi deploy --sdl ${file} --deposit <usd>`
+          : "console-axi sdl init <template> [flags] > app.yml";
         printResult(
           {
             count: `${matched.length} matching`,
@@ -188,12 +222,79 @@ function registerScreen(sdl: Command): void {
             note:
               matched.length > 0
                 ? "Advisory only — providers may run custom bid scripts, so a match does not guarantee a bid."
-                : "No providers currently match. Try relaxing placement attributes or signedBy in the SDL."
+                : "No providers currently match. Try lowering resources or relaxing --attribute / --signed-by."
           },
-          { help: [`console-axi deploy --sdl ${file} --deposit <usd>`] }
+          { help: [deployHelp] }
         );
       })
     );
+}
+
+/** Load and validate an SDL file, throwing a usage error if it is invalid. */
+function loadValidSdl(file: string): SdlDoc {
+  const { valid, errors, parsed } = validateSdl(readFileOrStdin(file));
+  if (!valid || !parsed) {
+    throw new AxiError({
+      code: "usage",
+      message: `SDL is invalid: ${errors.map((e) => e.message).join("; ")}`,
+      help: [`console-axi sdl validate ${file}`]
+    });
+  }
+  return parsed;
+}
+
+/** Build a throwaway SDL from resource flags (via a template) so chain-sdk does the unit math. */
+function synthesizeSdl(o: InitOptions): SdlDoc {
+  const templateName = o.gpu !== undefined || o.gpuModel !== undefined ? "gpu" : "web";
+  const template = getTemplate(templateName);
+  if (!template) throw new AxiError({ code: "internal", message: `Missing "${templateName}" template.` });
+  const { valid, errors, parsed } = validateSdl(toYaml(template.build(o)));
+  if (!valid || !parsed) {
+    throw new AxiError({ code: "internal", message: `Synthesized SDL failed validation: ${errors.map((e) => e.message).join("; ")}` });
+  }
+  return parsed;
+}
+
+/** Apply resource-flag overrides onto every compute profile of a parsed SDL (mainly for single-service SDLs). */
+function applyResourceOverrides(sdl: SdlDoc, o: InitOptions): void {
+  for (const profile of Object.values(sdl.profiles?.compute ?? {})) {
+    const r = profile.resources;
+    if (!r) continue;
+    if (o.cpu !== undefined) r.cpu = { units: cpuUnits(o.cpu) };
+    if (o.memory !== undefined) r.memory = { size: o.memory };
+    if (o.storage !== undefined) r.storage = { size: o.storage };
+    if (o.gpu !== undefined || o.gpuModel !== undefined) {
+      r.gpu = { units: o.gpu ?? 1, attributes: { vendor: { nvidia: [{ model: o.gpuModel ?? "a100" }] } } };
+    }
+  }
+  if (o.count !== undefined) {
+    for (const svc of Object.values(sdl.deployment ?? {})) {
+      for (const target of Object.values(svc)) target.count = o.count;
+    }
+  }
+}
+
+/** Merge `--attribute k=v` (upsert by key) and `--signed-by` (union into anyOf) onto SDL-derived requirements. */
+function mergeRequirements(base: ScreenRequirements, attributes: string[], signedBy: string[]): ScreenRequirements {
+  const attrs = [...(base.attributes ?? [])];
+  for (const kv of attributes) {
+    const idx = kv.indexOf("=");
+    const key = kv.slice(0, idx);
+    const value = kv.slice(idx + 1);
+    const existing = attrs.findIndex((a) => a.key === key);
+    if (existing >= 0) attrs[existing] = { key, value };
+    else attrs.push({ key, value });
+  }
+
+  let sb = base.signedBy;
+  if (signedBy.length > 0) {
+    sb = { anyOf: [...new Set([...(sb?.anyOf ?? []), ...signedBy])], allOf: sb?.allOf ?? [] };
+  }
+
+  const req: ScreenRequirements = {};
+  if (sb) req.signedBy = sb;
+  if (attrs.length > 0) req.attributes = attrs;
+  return req;
 }
 
 interface Estimate {
@@ -252,10 +353,26 @@ function parseIntFlag(value: string, flag: string): number {
   return n;
 }
 
+interface RawScreenOptions {
+  cpu?: string;
+  memory?: string;
+  storage?: string;
+  gpu?: string;
+  gpuModel?: string;
+  count?: string;
+  attribute: string[];
+  signedBy: string[];
+  reclamationWindow?: string;
+}
+
 function collectKeyValue(value: string, previous: string[]): string[] {
   if (!value.includes("=")) {
-    throw new AxiError({ code: "usage", message: `--env must be KEY=value, got "${value}".` });
+    throw new AxiError({ code: "usage", message: `expected KEY=value, got "${value}".` });
   }
+  return [...previous, value];
+}
+
+function collectValue(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 

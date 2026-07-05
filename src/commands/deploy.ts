@@ -32,7 +32,7 @@ export function registerDeploy(program: Command): void {
       action(async (opts: DeployOpts, command: Command) => {
         const { client, config } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
-        if (!opts.skipValidation) assertSdlValid(sdl);
+        const validatedSdl = opts.skipValidation ? undefined : assertSdlValid(sdl);
         const deposit = Number(opts.deposit);
         if (!Number.isFinite(deposit) || deposit <= 0) {
           throw new AxiError({ code: "usage", message: `--deposit must be a positive USD amount, got "${opts.deposit}".` });
@@ -45,7 +45,7 @@ export function registerDeploy(program: Command): void {
         // Advisory only, so a screening outage never blocks — only a confirmed empty match does.
         let screenedProviders: number | undefined;
         if (!opts.skipScreening) {
-          const { parsed } = parseSdlYaml(sdl);
+          const parsed = validatedSdl ?? parseSdlYaml(sdl).parsed;
           if (parsed) {
             try {
               screenedProviders = (await screenSupply(client, parsed)).length;
