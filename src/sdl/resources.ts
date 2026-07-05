@@ -3,13 +3,6 @@ import { generateManifest } from "@akashnetwork/chain-sdk";
 import { AxiError } from "../errors.js";
 import type { SdlDoc } from "./types.js";
 
-/** Aggregate spec for POST /v1/pricing (cpu in thousandths of a core, bytes elsewhere). */
-export interface PricingSpec {
-  cpu: number;
-  memory: number;
-  storage: number;
-}
-
 interface ResourceAttribute {
   key: string;
   value: string;
@@ -26,11 +19,6 @@ export interface ScreeningResource {
   };
   count: number;
   price: { denom: string; amount: string };
-}
-
-export interface DerivedResources {
-  pricing: PricingSpec;
-  screening: ScreeningResource[];
 }
 
 // Minimal view of chain-sdk's generateManifest output (resource `val`s are Uint8Arrays
@@ -65,11 +53,11 @@ function decodeVal(val: unknown): string {
 }
 
 /**
- * Derive pricing + bid-screening request inputs from a parsed SDL by running
- * chain-sdk's manifest generator (which does the unit math), then attaching the
- * per-service replica count and price from the SDL.
+ * Derive bid-screening request inputs from a parsed SDL by running chain-sdk's
+ * manifest generator (which does the unit math), then attaching the per-service
+ * replica count and price from the SDL.
  */
-export function deriveResources(sdl: SdlDoc): DerivedResources {
+export function deriveResources(sdl: SdlDoc): ScreeningResource[] {
   let result: ManifestResult;
   try {
     result = generateManifest(sdl as never) as ManifestResult;
@@ -81,25 +69,10 @@ export function deriveResources(sdl: SdlDoc): DerivedResources {
   }
 
   const screening: ScreeningResource[] = [];
-  let cpu = 0;
-  let memory = 0;
-  let storage = 0;
 
   for (const group of result.value.groups ?? []) {
     for (const svc of group.services ?? []) {
       const r = svc.resources;
-      const count = countFor(sdl, svc.name, group.name);
-      const price = priceFor(sdl, svc.name, group.name);
-
-      const cpuVal = Number(decodeVal(r.cpu.units.val)) || 0;
-      const memVal = Number(decodeVal(r.memory.quantity.val)) || 0;
-      const storageVals = (r.storage ?? []).map((s) => Number(decodeVal(s.quantity.val)) || 0);
-      const storageTotal = storageVals.reduce((a, b) => a + b, 0);
-
-      cpu += cpuVal * count;
-      memory += memVal * count;
-      storage += storageTotal * count;
-
       screening.push({
         resource: {
           id: r.id ?? 1,
@@ -112,13 +85,13 @@ export function deriveResources(sdl: SdlDoc): DerivedResources {
             attributes: s.attributes ?? []
           }))
         },
-        count,
-        price
+        count: countFor(sdl, svc.name, group.name),
+        price: priceFor(sdl, svc.name, group.name)
       });
     }
   }
 
-  return { pricing: { cpu, memory, storage }, screening };
+  return screening;
 }
 
 function manifestError(reason: string): AxiError {

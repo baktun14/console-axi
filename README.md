@@ -33,7 +33,7 @@ Every deployment needs a valid [SDL](https://akash.network/docs/getting-started/
 console-axi sdl templates                                   # list scaffolds: web, gpu, multi-service, ip-lease
 console-axi sdl init web --image nginx:1.27 --port 80 > app.yml   # generate SDL YAML (stdout)
 console-axi sdl validate app.yml                            # offline: schema + best-practice checks (exit 2 if invalid)
-console-axi sdl estimate app.yml                            # live: USD/mo vs AWS/GCP/Azure + matching providers (no key)
+console-axi sdl screen app.yml                              # live: which providers could bid (no key)
 console-axi deploy --sdl app.yml --deposit 5
 ```
 
@@ -56,7 +56,7 @@ Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <
 | Area | Commands |
 |------|----------|
 | Auth/config | `login`, `logout`, `whoami`, `setup` |
-| SDL | `sdl templates`, `sdl init <template>`, `sdl validate <file>`, `sdl estimate <file>` |
+| SDL | `sdl templates`, `sdl init <template>`, `sdl validate <file>`, `sdl screen [file]` |
 | Deploy | `deploy` (composite) |
 | Deployments | `deployment list\|view\|status\|create\|update\|close\|deposit` |
 | Market | `bid list --dseq <dseq>`, `lease create ...` |
@@ -135,7 +135,7 @@ node dist/cli.js sdl init web --image nginx:1.27 --port 80 | node dist/cli.js sd
 node dist/cli.js sdl validate examples/hello.yml           # offline validation + summary
 ```
 
-`sdl estimate <file>` also works without a key (it calls the public pricing and bid-screening endpoints).
+`sdl screen [file]` also works without a key (it calls the public bid-screening endpoint).
 
 Run the real `console-axi` binary during development with `npm link`.
 
