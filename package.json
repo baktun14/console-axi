@@ -1,6 +1,6 @@
 {
   "name": "console-axi",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "An AXI (Agent eXperience Interface) CLI for the Akash Console managed-wallet API. Token-efficient TOON output, content-first, idempotent commands for agents.",
   "type": "module",
   "bin": {
