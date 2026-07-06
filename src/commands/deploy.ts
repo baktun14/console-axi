@@ -8,7 +8,7 @@ import { type BidLike, parseAcceptStrategy, selectBids } from "../deploy/select-
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { consoleDeploymentUrl } from "../output/console-url.js";
-import { blockPriceToUsdPerMonth } from "../output/price.js";
+import { blockPriceToUsdPerMonth, formatUsd, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
 import { screenSupply } from "../sdl/screen.js";
 import { assertSdlValid, parseSdlYaml } from "../sdl/validate.js";
@@ -22,7 +22,7 @@ export function registerDeploy(program: Command): void {
     .command("deploy")
     .description("One-shot: create -> accept a bid -> lease -> wait for URIs")
     .requiredOption("--sdl <file|->", "SDL YAML file path, or - for stdin")
-    .requiredOption("--deposit <usd>", "deposit amount in USD (e.g. 5)")
+    .requiredOption("--deposit <usd>", "deposit amount in USD (minimum 0.5)")
     .option("--accept <strategy>", "cheapest | first | <provider-address>", "cheapest")
     .option("--bid-timeout <seconds>", "max seconds to wait for bids", "90")
     .option("--timeout <seconds>", "max seconds to wait for the workload to become ready", "240")
@@ -36,6 +36,9 @@ export function registerDeploy(program: Command): void {
         const deposit = Number(opts.deposit);
         if (!Number.isFinite(deposit) || deposit <= 0) {
           throw new AxiError({ code: "usage", message: `--deposit must be a positive USD amount, got "${opts.deposit}".` });
+        }
+        if (deposit < MIN_DEPOSIT_USD) {
+          throw new AxiError({ code: "usage", message: `--deposit must be at least ${formatUsd(MIN_DEPOSIT_USD)} (minimum deposit), got ${formatUsd(deposit)}.` });
         }
         const bidTimeoutMs = Number(opts.bidTimeout) * 1000;
         const readyTimeoutMs = Number(opts.timeout) * 1000;

@@ -74,6 +74,14 @@ describe("validateSdl", () => {
     const result = validateSdl(mutate("nginx:1.27", "registry.example.com:5000/app:1.0"));
     expect(result.valid).toBe(true);
   });
+
+  it("rejects a non-uact pricing denom (uakt) via the local lint rule", () => {
+    const result = validateSdl(mutate("denom: uact", "denom: uakt"));
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => e.path === "/profiles/placement/dcloud/pricing/web/denom" && /uact/.test(e.message))
+    ).toBe(true);
+  });
 });
 
 describe("assertSdlValid", () => {

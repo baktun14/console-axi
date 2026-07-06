@@ -10,7 +10,26 @@ export function lintSdl(sdl: SdlDoc): SdlIssue[] {
   for (const [name, svc] of Object.entries(sdl.services ?? {})) {
     checkImageTag(name, svc, issues);
   }
+  checkPricingDenom(sdl, issues);
   return issues;
+}
+
+/** Pricing must be denominated in `uact` (micro-ACT, pegged 1:1 to USD). `uakt` no longer exists. */
+function checkPricingDenom(sdl: SdlDoc, issues: SdlIssue[]): void {
+  for (const [placement, p] of Object.entries(sdl.profiles?.placement ?? {})) {
+    for (const [svc, price] of Object.entries(p?.pricing ?? {})) {
+      const denom = price?.denom;
+      if (typeof denom !== "string" || denom === "uact") continue;
+      issues.push({
+        path: `/profiles/placement/${placement}/pricing/${svc}/denom`,
+        message: `Pricing denom "${denom}" is not accepted; deployments are priced in "uact" (micro-ACT, 1:1 USD).`,
+        hint:
+          denom === "uakt"
+            ? `"uakt" no longer exists — use "uact", or regenerate with \`console-axi sdl init\`.`
+            : `Change the denom to "uact".`
+      });
+    }
+  }
 }
 
 /** Deployments must pin an explicit, reproducible image tag (no `:latest`, no bare name). */

@@ -1,6 +1,6 @@
 ---
 name: console-axi
-description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate an Akash SDL", "estimate Akash cost", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
+description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate/price-check an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
 ---
 
 # console-axi
@@ -30,8 +30,8 @@ console-axi whoami
 ## Building a valid SDL
 
 Every deployment needs a valid SDL (the YAML describing your app). You act as the
-wizard: interview the user, scaffold an SDL, then validate and price-check it
-before deploying — never hand a half-formed SDL to `deploy`.
+wizard: interview the user, scaffold an SDL with `sdl init`, then validate and
+price-check it before deploying — never hand-write pricing or a half-formed SDL.
 
 Ask only what you don't already know, roughly in this order:
 
@@ -49,13 +49,22 @@ console-axi sdl templates                                   # list scaffolds
 console-axi sdl init web --image nginx:1.27 --port 80 > app.yml
 console-axi sdl validate app.yml                            # offline: schema + best-practice checks
 console-axi sdl screen app.yml                              # live: which providers could bid (probe supply)
-console-axi deploy --sdl app.yml --deposit 5
+console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
 `sdl init <template>` prints raw SDL YAML to stdout — redirect it to a file or pipe
 into `sdl validate -`. Templates: `web`, `gpu`, `multi-service`, `ip-lease`. Common
 flags: `--image --port --as --cpu --memory --storage --count --price --env K=V`
 (plus `--gpu --gpu-model` for the `gpu` template).
+
+**Pricing denom:** SDL pricing is always denominated in `uact` (micro-ACT, pegged
+1:1 to USD). Never use `uakt` — it no longer exists, and the CLI rejects any SDL
+whose pricing denom isn't `uact` before spending a deposit. `sdl init` templates
+already emit `uact`, so scaffolding avoids the problem entirely.
+
+**Deposit:** deposits are in USD dollars; the **minimum is $0.5**. Use
+`--deposit 0.5` unless the user wants more escrow headroom. Anything below $0.5 is
+rejected client-side.
 
 `sdl validate` exits 2 on an invalid SDL and lists each problem with a fix hint;
 edit the SDL and re-run until it passes. `sdl screen` needs no API key.
@@ -84,13 +93,13 @@ zero providers match; pass `--skip-screening` to override (a screening outage ne
 ## The fast path: deploy
 
 ```
-console-axi deploy --sdl app.yml --deposit 5
+console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
 This creates the deployment, waits for bids, accepts the cheapest, creates the
-lease, waits until the workload is ready, and prints the live service URIs — in
-one call. On failure it leaves the deployment OPEN and prints the exact retry or
-close command.
+lease, waits until the workload is ready, and prints the live service URIs plus a
+`console:` deep-link to the deployment in the Console web UI — in one call. On
+failure it leaves the deployment OPEN and prints the exact retry or close command.
 
 Flags: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>`.
 
@@ -100,9 +109,12 @@ Flags: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>
 console-axi deployment list
 console-axi deployment status <dseq>     # live readiness, URIs, forwarded ports
 console-axi deployment view <dseq>       # state, escrow (USD), leases
-console-axi deployment deposit <dseq> --amount 5
+console-axi deployment deposit <dseq> --amount 0.5
 console-axi deployment close <dseq>      # idempotent
 ```
+
+Every single-deployment command prints a `console:` link
+(https://console.akash.network/deployments/<dseq>) so a human can open the web UI.
 
 Atomic steps if you need them: `deployment create`, `bid list --dseq <dseq>`,
 `lease create --dseq --gseq --oseq --provider --manifest`.

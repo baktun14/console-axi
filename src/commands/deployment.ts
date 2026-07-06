@@ -14,14 +14,17 @@ import { saveManifest } from "../deploy/manifest-store.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { consoleDeploymentUrl } from "../output/console-url.js";
-import { blockPriceToUsdPerMonth } from "../output/price.js";
+import { blockPriceToUsdPerMonth, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
 import { assertSdlValid } from "../sdl/validate.js";
 
-function parseUsd(value: string, flag: string): number {
+function parseUsd(value: string, flag: string, min = 0): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) {
     throw new AxiError({ code: "usage", message: `${flag} must be a positive USD amount, got "${value}".` });
+  }
+  if (n < min) {
+    throw new AxiError({ code: "usage", message: `${flag} must be at least ${formatUsd(min)} (minimum deposit), got ${formatUsd(n)}.` });
   }
   return n;
 }
@@ -156,14 +159,14 @@ export function registerDeployment(program: Command): void {
     .command("create")
     .description("Create a deployment on-chain (managed wallet signs server-side)")
     .requiredOption("--sdl <file|->", "SDL YAML file path, or - for stdin")
-    .requiredOption("--deposit <usd>", "deposit amount in USD (e.g. 5)")
+    .requiredOption("--deposit <usd>", "deposit amount in USD (minimum 0.5)")
     .option("--skip-validation", "skip client-side SDL validation before creating the deployment")
     .action(
       action(async (opts: { sdl: string; deposit: string; skipValidation?: boolean }, command: Command) => {
         const { client, config } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
         if (!opts.skipValidation) assertSdlValid(sdl);
-        const deposit = parseUsd(opts.deposit, "--deposit");
+        const deposit = parseUsd(opts.deposit, "--deposit", MIN_DEPOSIT_USD);
         const data = unwrap(await client.POST("/v1/deployments", { body: { data: { sdl, deposit } } })).data;
         // Cache the manifest so `lease create` can send it without a manual arg.
         saveManifest(data.dseq, data.manifest);
