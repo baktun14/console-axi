@@ -7,12 +7,12 @@ Deployments are **signed server-side** by your managed wallet, so the agent neve
 ## Install
 
 ```bash
-npm install -g console-axi
-# or run without installing:
-npx -y console-axi
+curl -fsSL https://raw.githubusercontent.com/baktun14/console-axi/main/install.sh | sh
 ```
 
-Node.js >= 20 is required.
+Installs a self-contained binary to `~/.local/bin` (no Node required; macOS/Linux, arm64/x64) and wires up the Claude Code session hook + skill. Update with `console-axi upgrade`; remove with `console-axi uninstall` (add `--purge` to also drop the stored API key).
+
+Prefer npm? `npm install -g console-axi` (Node.js >= 20) or `npx -y console-axi`.
 
 ## Authenticate
 
@@ -62,10 +62,11 @@ All output is TOON. Money is always USD. Errors are structured (`error: { code, 
 ## Session hook & Agent Skill
 
 ```bash
-console-axi setup                 # installs a session-start hook (Claude Code)
+console-axi setup                 # installs the session hook + Claude skill
+console-axi uninstall             # removes them (and the binary; --no-self to keep it)
 ```
 
-The hook injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session. A packaged [Agent Skill](./skills/console-axi/SKILL.md) is also included.
+`setup` installs a SessionStart hook that injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session, and installs the [Agent Skill](./skills/console-axi/SKILL.md) into `~/.claude/skills/`. `install.sh` runs `setup` for you. Both honor `CLAUDE_CONFIG_DIR`.
 
 ## Configuration
 
@@ -87,6 +88,7 @@ npm run build        # bundle to dist/cli.js
 npm test             # vitest
 npm run lint
 npm run gen:skill    # regenerate skills/console-axi/SKILL.md
+npm run build:bin    # cross-compile standalone binaries to dist-bin/ (requires bun)
 ```
 
 ## Testing

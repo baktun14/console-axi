@@ -1,6 +1,7 @@
 # Build & deps
 node_modules
 dist
+dist-bin
 coverage
 *.log
 .DS_Store

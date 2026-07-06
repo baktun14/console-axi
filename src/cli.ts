@@ -10,10 +10,12 @@ import { registerBid, registerLease } from "./commands/market.js";
 import { registerProvider } from "./commands/provider.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerShell } from "./commands/shell.js";
+import { registerUninstall } from "./commands/uninstall.js";
+import { registerUpgrade } from "./commands/upgrade.js";
 import { registerUsage, registerWallet } from "./commands/wallet.js";
 import { printError } from "./output/render.js";
-
-const VERSION = "0.1.0";
+import { maybeNotifyUpdate, registerUpdateCheck, scheduleRefresh } from "./update/check.js";
+import { VERSION } from "./version.js";
 
 /** Commander codes that are informational, not failures. */
 const INFO_CODES = new Set(["commander.helpDisplayed", "commander.version", "commander.help"]);
@@ -25,6 +27,7 @@ function buildProgram(): Command {
     .description("AXI CLI for the Akash Console managed-wallet API (token-efficient TOON output for agents)")
     .version(VERSION, "-v, --version")
     .option("--url <url>", "override the Console API base URL")
+    .option("--no-update-check", "skip the daily check for a newer console-axi")
     .showHelpAfterError(false)
     .exitOverride()
     .configureOutput({
@@ -45,12 +48,23 @@ function buildProgram(): Command {
   registerShell(program);
   registerApiKey(program);
   registerJwt(program);
+  registerUpgrade(program);
+  registerUninstall(program);
+  registerUpdateCheck(program);
 
   return program;
 }
 
 async function main(): Promise<void> {
   const program = buildProgram();
+
+  // Surface a cached "update available" nudge (stderr only) and refresh the
+  // marker in the background — unless we ARE the background refresh child.
+  if (!process.argv.includes("__update-check")) {
+    maybeNotifyUpdate(VERSION);
+    scheduleRefresh();
+  }
+
   try {
     // No args -> content-first home view (AXI principle 8).
     if (process.argv.length <= 2) {

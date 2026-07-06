@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -7,10 +7,15 @@ import type { Command } from "commander";
 import { action } from "../context.js";
 import { AxiError } from "../errors.js";
 import { printResult } from "../output/render.js";
+import { SKILL_MD } from "../skill/skill-content.js";
 
 const DEFAULT_HOOK_COMMAND = "console-axi home --trimmed";
-/** Identifies our hook so setup is idempotent and repairable. */
+/** Identifies our hook so setup is idempotent and uninstall can find it. */
 const HOOK_MARKER = "console-axi home";
+const SKILL_NAME = "console-axi";
+
+type WriteStatus = "installed" | "repaired" | "updated" | "unchanged";
+type RemoveStatus = "removed" | "absent";
 
 interface ClaudeHookEntry {
   matcher?: string;
@@ -22,13 +27,26 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
-function claudeSettingsPath(): string {
-  const dir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
-  return join(dir, "settings.json");
+/** Root of the Claude Code config (honours CLAUDE_CONFIG_DIR). */
+export function claudeDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 }
 
-/** Install or repair the Claude Code SessionStart hook. Returns the action taken. */
-function installClaudeHook(command: string): { path: string; status: "installed" | "repaired" | "unchanged" } {
+function claudeSettingsPath(): string {
+  return join(claudeDir(), "settings.json");
+}
+
+function skillPath(): string {
+  return join(claudeDir(), "skills", SKILL_NAME, "SKILL.md");
+}
+
+function persist(path: string, settings: ClaudeSettings): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
+}
+
+/** Install or repair the Claude Code SessionStart hook. */
+export function installClaudeHook(command: string): { path: string; status: WriteStatus } {
   const path = claudeSettingsPath();
   const settings: ClaudeSettings = existsSync(path)
     ? (JSON.parse(readFileSync(path, "utf8")) as ClaudeSettings)
@@ -57,26 +75,76 @@ function installClaudeHook(command: string): { path: string; status: "installed"
   return { path, status: "installed" };
 }
 
-function persist(path: string, settings: ClaudeSettings): void {
+/** Write the packaged skill into ~/.claude/skills/console-axi/, keeping it in sync. */
+export function installClaudeSkill(): { path: string; status: WriteStatus } {
+  const path = skillPath();
+  if (existsSync(path) && readFileSync(path, "utf8") === SKILL_MD) {
+    return { path, status: "unchanged" };
+  }
+  const existed = existsSync(path);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
+  writeFileSync(path, SKILL_MD);
+  return { path, status: existed ? "updated" : "installed" };
+}
+
+/** Remove the console-axi SessionStart hook (idempotent; leaves other hooks intact). */
+export function removeClaudeHook(): { path: string; status: RemoveStatus } {
+  const path = claudeSettingsPath();
+  if (!existsSync(path)) return { path, status: "absent" };
+  const settings = JSON.parse(readFileSync(path, "utf8")) as ClaudeSettings;
+  const sessionStart = settings.hooks?.SessionStart;
+  if (!sessionStart || sessionStart.length === 0) return { path, status: "absent" };
+
+  let changed = false;
+  for (let i = sessionStart.length - 1; i >= 0; i--) {
+    const entry = sessionStart[i];
+    if (!entry?.hooks) continue;
+    const kept = entry.hooks.filter(
+      (h) => !(typeof h.command === "string" && h.command.includes(HOOK_MARKER))
+    );
+    if (kept.length !== entry.hooks.length) {
+      changed = true;
+      entry.hooks = kept;
+      if (kept.length === 0) sessionStart.splice(i, 1);
+    }
+  }
+  if (!changed) return { path, status: "absent" };
+  persist(path, settings);
+  return { path, status: "removed" };
+}
+
+/** Remove the installed skill dir (only ~/.claude/skills/console-axi/). */
+export function removeClaudeSkill(): { path: string; status: RemoveStatus } {
+  const dir = join(claudeDir(), "skills", SKILL_NAME);
+  if (!existsSync(dir)) return { path: dir, status: "absent" };
+  rmSync(dir, { recursive: true, force: true });
+  return { path: dir, status: "removed" };
 }
 
 export function registerSetup(program: Command): void {
   program
     .command("setup")
-    .description("Install a session hook that injects a compact status view at agent start")
+    .description("Install the session hook + Claude skill so agents can drive console-axi")
     .option("--agent <agent>", "claude | codex | opencode", "claude")
     .option("--command <cmd>", "the hook command to run", DEFAULT_HOOK_COMMAND)
+    .option("--no-hook", "skip installing the session-start hook")
+    .option("--no-skill", "skip installing the Claude skill")
     .action(
-      action((opts: { agent: string; command: string }) => {
+      action((opts: { agent: string; command: string; hook: boolean; skill: boolean }) => {
         const agent = opts.agent.toLowerCase();
         if (agent === "claude") {
-          const result = installClaudeHook(opts.command);
-          printResult(
-            { ok: true, agent: "claude", status: result.status, settings: result.path, hook: opts.command },
-            { help: ["console-axi home --trimmed"] }
-          );
+          const result: Record<string, unknown> = { ok: true, agent: "claude" };
+          if (opts.hook) {
+            const hook = installClaudeHook(opts.command);
+            result.hook = hook.status;
+            result.settings = hook.path;
+          }
+          if (opts.skill) {
+            const skill = installClaudeSkill();
+            result.skill = skill.status;
+            result.skillPath = skill.path;
+          }
+          printResult(result, { help: ["console-axi", "console-axi uninstall"] });
           return;
         }
         if (agent === "codex" || agent === "opencode") {
