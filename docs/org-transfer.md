@@ -42,9 +42,11 @@ git grep -n "baktun14/console-axi"
   after transfer. Ship a release from the new slug and cut a version bump so users
   pick up a binary whose baked `REPO_SLUG` points at the org (older binaries keep
   working via redirect until the old path is reclaimed).
-- **`release.yml`**: uses the default `GITHUB_TOKEN`, so it needs no secret changes
-  after transfer. Re-check that `contents: write` is allowed under the org's Actions
-  policy.
+- **`release-please.yml`**: uses the default `GITHUB_TOKEN`, so it needs no secret
+  changes after transfer. Under the org's Actions policy, confirm `contents: write` is
+  allowed **and** "Allow GitHub Actions to create and approve pull requests" is enabled
+  (release-please needs it to open the release PR). akash-network/akash-skill already
+  runs release-please, so the org policy should already permit this.
 - **npm** (only if you publish there): the package name `console-axi` is unscoped and
   doesn't have to change. If you'd rather scope it to `@akashnetwork/console-axi`,
   that's a separate rename (update `name` + `bin` + install docs).

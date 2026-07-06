@@ -39,18 +39,21 @@ npm run gen:api
 
 ### Releasing
 
-Distribution is a self-contained binary per platform, published to GitHub Releases
-and installed via `curl … | sh` (see the README). To cut a release:
+Releases are automated with [release-please](https://github.com/googleapis/release-please)
+— **you never tag by hand.** Just merge PRs using [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:` → minor, `fix:` → patch, `feat!`/`BREAKING CHANGE:` → major). release-please
+opens and keeps a **release PR** that bumps `package.json` + `CHANGELOG.md` from those
+commits; when you're ready to ship, **merge the release PR**.
 
-```bash
-npm version patch|minor|major   # bumps package.json (the single version source) + tags
-git push --follow-tags
-```
+Merging it creates the `v<version>` tag + GitHub Release, and the *same*
+[`release-please.yml`](./.github/workflows/release-please.yml) run cross-compiles the
+four binaries with Bun and attaches them + `SHA256SUMS` + `install.sh` + `SKILL.md`.
+Users pick it up via the daily update nudge → `console-axi upgrade`. `package.json` is
+the single version source (`src/version.ts` imports it; the binary bakes it in).
 
-The `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml),
-which asserts the tag matches `package.json`, runs the checks, cross-compiles the four
-binaries with Bun, and publishes them + `SHA256SUMS` + `install.sh` + `SKILL.md`.
-Users pick it up via the daily update nudge → `console-axi upgrade`.
+> One-time repo setting: **Settings → Actions → General → Workflow permissions →**
+> enable **"Allow GitHub Actions to create and approve pull requests"** so release-please
+> can open its PR.
 
 ### Maintainer notes
 
