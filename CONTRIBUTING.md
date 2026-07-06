@@ -37,6 +37,29 @@ If you changed the API surface, regenerate the client from the live spec:
 npm run gen:api
 ```
 
+### Releasing
+
+Distribution is a self-contained binary per platform, published to GitHub Releases
+and installed via `curl … | sh` (see the README). To cut a release:
+
+```bash
+npm version patch|minor|major   # bumps package.json (the single version source) + tags
+git push --follow-tags
+```
+
+The `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml),
+which asserts the tag matches `package.json`, runs the checks, cross-compiles the four
+binaries with Bun, and publishes them + `SHA256SUMS` + `install.sh` + `SKILL.md`.
+Users pick it up via the daily update nudge → `console-axi upgrade`.
+
+### Maintainer notes
+
+- **Moving to the `akash-network` org:** follow [docs/org-transfer.md](./docs/org-transfer.md)
+  — it lists every repo-slug reference to update and the release/install continuity steps.
+- **Upstream skill contribution:** [docs/akash-skill/](./docs/akash-skill/) holds a
+  ready-to-open PR spec for adding console-axi to `akash-network/akash-skill`, deferred
+  until this repo graduates to the org.
+
 ### License
 
 By contributing, you agree that your contributions are licensed under the
