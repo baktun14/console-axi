@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/baktun14/console-axi/compare/v1.0.1...v1.1.0) (2026-07-07)
+
+
+### Features
+
+* **dist:** stream downloads with progress + gzip release assets ([#10](https://github.com/baktun14/console-axi/issues/10)) ([97b247f](https://github.com/baktun14/console-axi/commit/97b247f8fb11b4bc22d7670818493036f82bedc8))
+
 ## [1.0.1](https://github.com/baktun14/console-axi/compare/v1.0.0...v1.0.1) (2026-07-07)
 
 
