@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/baktun14/console-axi/compare/v1.1.0...v1.1.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* **deployments:** handle null service uris ([#12](https://github.com/baktun14/console-axi/issues/12)) ([dfede1e](https://github.com/baktun14/console-axi/commit/dfede1e1aa8d2ccba5d49119c0ee2a7e47720ac6))
+
 ## [1.1.0](https://github.com/baktun14/console-axi/compare/v1.0.1...v1.1.0) (2026-07-07)
 
 
