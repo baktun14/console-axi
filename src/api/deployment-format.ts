@@ -10,13 +10,13 @@ export interface RawLease {
 
 export interface LeaseStatus {
   services: Record<string, ServiceStatus>;
-  forwarded_ports: Record<string, Array<{ port: number; externalPort: number; host?: string }>>;
-  ips: Record<string, Array<{ IP: string; ExternalPort: number; Protocol: string }>>;
+  forwarded_ports: Record<string, Array<{ port: number; externalPort: number; host?: string }>> | null;
+  ips: Record<string, Array<{ IP: string; ExternalPort: number; Protocol: string }>> | null;
 }
 
 export interface ServiceStatus {
   name: string;
-  uris: string[];
+  uris: string[] | null;
   replicas: number;
   ready_replicas: number;
   available: number;
@@ -52,10 +52,15 @@ export function collectUris(leases: RawLease[]): string[] {
   for (const lease of leases) {
     const services = lease.status?.services ?? {};
     for (const svc of Object.values(services)) {
-      uris.push(...svc.uris);
+      uris.push(...serviceUris(svc.uris));
     }
   }
   return uris;
+}
+
+export function formatServiceUris(uris: string[] | null | undefined): string {
+  const externalUris = serviceUris(uris);
+  return externalUris.length > 0 ? externalUris.join(" ") : "-";
 }
 
 /** Whether every service in every lease has at least one ready replica. */
@@ -66,3 +71,7 @@ export function isDeploymentReady(leases: RawLease[]): boolean {
 }
 
 export { formatUsd, uactToUsd };
+
+function serviceUris(uris: string[] | null | undefined): string[] {
+  return uris ?? [];
+}
