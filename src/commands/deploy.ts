@@ -7,8 +7,11 @@ import { saveManifest } from "../deploy/manifest-store.js";
 import { type BidLike, parseAcceptStrategy, selectBids } from "../deploy/select-bids.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
-import { blockPriceToUsdPerMonth } from "../output/price.js";
+import { consoleDeploymentUrl } from "../output/console-url.js";
+import { blockPriceToUsdPerMonth, formatUsd, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
+import { screenSupply } from "../sdl/screen.js";
+import { assertSdlValid, parseSdlYaml } from "../sdl/validate.js";
 import { pollUntil } from "../util/poll.js";
 
 const BID_POLL_INTERVAL_MS = 3000;
@@ -19,21 +22,53 @@ export function registerDeploy(program: Command): void {
     .command("deploy")
     .description("One-shot: create -> accept a bid -> lease -> wait for URIs")
     .requiredOption("--sdl <file|->", "SDL YAML file path, or - for stdin")
-    .requiredOption("--deposit <usd>", "deposit amount in USD (e.g. 5)")
+    .requiredOption("--deposit <usd>", "deposit amount in USD (minimum 0.5)")
     .option("--accept <strategy>", "cheapest | first | <provider-address>", "cheapest")
     .option("--bid-timeout <seconds>", "max seconds to wait for bids", "90")
     .option("--timeout <seconds>", "max seconds to wait for the workload to become ready", "240")
+    .option("--skip-validation", "skip client-side SDL validation before creating the deployment")
+    .option("--skip-screening", "skip the pre-flight supply probe that aborts when no providers match")
     .action(
       action(async (opts: DeployOpts, command: Command) => {
-        const { client } = authedContext(command);
+        const { client, config } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
+        const validatedSdl = opts.skipValidation ? undefined : assertSdlValid(sdl);
         const deposit = Number(opts.deposit);
         if (!Number.isFinite(deposit) || deposit <= 0) {
           throw new AxiError({ code: "usage", message: `--deposit must be a positive USD amount, got "${opts.deposit}".` });
         }
+        if (deposit < MIN_DEPOSIT_USD) {
+          throw new AxiError({ code: "usage", message: `--deposit must be at least ${formatUsd(MIN_DEPOSIT_USD)} (minimum deposit), got ${formatUsd(deposit)}.` });
+        }
         const bidTimeoutMs = Number(opts.bidTimeout) * 1000;
         const readyTimeoutMs = Number(opts.timeout) * 1000;
         const strategy = parseAcceptStrategy(opts.accept);
+
+        // 0. Pre-flight supply probe: don't spend a deposit if no provider can match.
+        // Advisory only, so a screening outage never blocks — only a confirmed empty match does.
+        let screenedProviders: number | undefined;
+        if (!opts.skipScreening) {
+          const parsed = validatedSdl ?? parseSdlYaml(sdl).parsed;
+          if (parsed) {
+            try {
+              screenedProviders = (await screenSupply(client, parsed)).length;
+            } catch {
+              screenedProviders = undefined; // endpoint unavailable — proceed without gating
+            }
+            if (screenedProviders === 0) {
+              throw new AxiError({
+                code: "no_supply",
+                message:
+                  "No providers currently match this SDL's requirements, so a deployment would likely receive no bids. No deployment was created.",
+                help: [
+                  `console-axi sdl screen ${opts.sdl}`,
+                  "relax placement attributes / signedBy in the SDL",
+                  `console-axi deploy --sdl ${opts.sdl} --deposit ${opts.deposit} --skip-screening`
+                ]
+              });
+            }
+          }
+        }
 
         // 1. Create the deployment (managed wallet signs server-side).
         const created = unwrap(await client.POST("/v1/deployments", { body: { data: { sdl, deposit } } })).data;
@@ -110,8 +145,10 @@ export function registerDeploy(program: Command): void {
           printResult(
             {
               dseq,
+              console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
               state: "lease created, not ready yet",
               providers,
+              ...(screenedProviders !== undefined ? { screenedProviders } : {}),
               cost: blockPriceToUsdPerMonth(totalPerBlock),
               note: "Workload did not report ready within the timeout; it may still be starting."
             },
@@ -126,7 +163,9 @@ export function registerDeploy(program: Command): void {
           {
             ok: true,
             dseq,
+            console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
             providers,
+            ...(screenedProviders !== undefined ? { screenedProviders } : {}),
             cost: blockPriceToUsdPerMonth(totalPerBlock),
             uris: uris.length > 0 ? uris : "no external URIs (internal-only services)"
           },
@@ -142,6 +181,8 @@ interface DeployOpts {
   accept: string;
   bidTimeout: string;
   timeout: string;
+  skipValidation?: boolean;
+  skipScreening?: boolean;
 }
 
 /** Build an error that keeps the deployment open and tells the agent how to recover. */

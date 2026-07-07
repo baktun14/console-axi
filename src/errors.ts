@@ -19,6 +19,7 @@ export type ErrorCode =
   | "usage"
   | "timeout"
   | "no_bids"
+  | "no_supply"
   | "network"
   | "api_error"
   | "config"

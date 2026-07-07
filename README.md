@@ -25,13 +25,29 @@ export CONSOLE_API_KEY=<key>
 console-axi whoami
 ```
 
+## Formulate an SDL
+
+Every deployment needs a valid [SDL](https://akash.network/docs/getting-started/stack-definition-language/) (the YAML that describes your app). The `sdl` commands help you scaffold, validate and price-check one **before** you deploy — validation runs entirely client-side (the Console API has no validate endpoint) via [`@akashnetwork/chain-sdk`](https://www.npmjs.com/package/@akashnetwork/chain-sdk) plus a few best-practice lint rules.
+
+```bash
+console-axi sdl templates                                   # list scaffolds: web, gpu, multi-service, ip-lease
+console-axi sdl init web --image nginx:1.27 --port 80 > app.yml   # generate SDL YAML (stdout)
+console-axi sdl validate app.yml                            # offline: schema + best-practice checks (exit 2 if invalid)
+console-axi sdl screen app.yml                              # live: which providers could bid (no key)
+console-axi deploy --sdl app.yml --deposit 0.5
+```
+
+`sdl init` common flags: `--image --port --as --cpu --memory --storage --count --price --env K=V` (plus `--gpu --gpu-model` for the `gpu` template). It prints raw YAML to stdout, so redirect to a file or pipe into `sdl validate -`.
+
+This is designed to be **agent-driven**: the packaged [Agent Skill](./skills/console-axi/SKILL.md) teaches an agent to interview the user and run this loop, so no interactive prompts are needed. `deploy`, `deployment create` and `deployment update` also validate the SDL client-side first (bypass with `--skip-validation`).
+
 ## Deploy in one command
 
 ```bash
-console-axi deploy --sdl app.yml --deposit 5
+console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
-Creates the deployment, waits for bids, accepts the cheapest, creates the lease, waits until the workload is ready, and prints the live service URIs. On failure it leaves the deployment **open** and prints the exact retry/close command, then exits non-zero.
+Creates the deployment, waits for bids, accepts the cheapest, creates the lease, waits until the workload is ready, and prints the live service URIs. On failure it leaves the deployment **open** and prints the exact retry/close command, then exits non-zero. Deposits are in USD; the minimum is **$0.5** (values below are rejected client-side).
 
 Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>`.
 
@@ -40,6 +56,7 @@ Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <
 | Area | Commands |
 |------|----------|
 | Auth/config | `login`, `logout`, `whoami`, `setup` |
+| SDL | `sdl templates`, `sdl init <template>`, `sdl validate <file>`, `sdl screen [file]` |
 | Deploy | `deploy` (composite) |
 | Deployments | `deployment list\|view\|status\|create\|update\|close\|deposit` |
 | Market | `bid list --dseq <dseq>`, `lease create ...` |
@@ -76,6 +93,7 @@ console-axi uninstall             # removes them (and the binary; --no-self to k
 | API base URL | `CONSOLE_API_URL` | `baseUrl` | `https://console-api.akash.network` |
 | Provider proxy | `CONSOLE_PROVIDER_PROXY_URL` | `providerProxyUrl` | `https://console.akash.network/provider-proxy-%{NETWORK}` |
 | Network | `CONSOLE_NETWORK` | `network` | `mainnet` |
+| Console web URL | `CONSOLE_WEB_URL` | `consoleWebUrl` | `https://console.akash.network` |
 
 Precedence: env > stored config > defaults. `--url` overrides the base URL per invocation. `%{NETWORK}` in the provider-proxy URL is replaced with the resolved network (used by `logs`, `events`, `exec`, `shell`).
 
@@ -113,7 +131,13 @@ node dist/cli.js                      # home view ("not signed in")
 node dist/cli.js --help               # full command tree
 node dist/cli.js whoami; echo $?      # -> unauthorized, exit 1
 node dist/cli.js frobnicate; echo $?  # -> unknown command, exit 2
+
+node dist/cli.js sdl templates        # list SDL scaffolds
+node dist/cli.js sdl init web --image nginx:1.27 --port 80 | node dist/cli.js sdl validate -   # -> valid: true
+node dist/cli.js sdl validate examples/hello.yml           # offline validation + summary
 ```
+
+`sdl screen [file]` also works without a key (it calls the public bid-screening endpoint).
 
 Run the real `console-axi` binary during development with `npm link`.
 
@@ -121,7 +145,7 @@ Run the real `console-axi` binary during development with `npm link`.
 
 This makes real on-chain deployments and spends a small amount of real funds.
 Point at a non-prod console-api with `--url` / `CONSOLE_API_URL` if you have one;
-otherwise `--deposit 5` followed by an immediate `close` keeps the cost minimal.
+otherwise `--deposit 0.5` (the minimum) followed by an immediate `close` keeps the cost minimal.
 
 ```bash
 export CONSOLE_API_KEY=<your-key>     # from the Console web UI: /user/api-keys

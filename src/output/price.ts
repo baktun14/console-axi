@@ -5,6 +5,9 @@
  */
 const UACT_PER_ACT = 1_000_000;
 
+/** Minimum initial deployment deposit in USD, enforced client-side (the server enforces it too). */
+export const MIN_DEPOSIT_USD = 0.5;
+
 /** Average block time in seconds (used to convert per-block price to monthly). */
 const BLOCK_TIME_SECONDS = 6;
 const SECONDS_PER_MONTH = 60 * 60 * 24 * 30;

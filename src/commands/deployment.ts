@@ -13,13 +13,18 @@ import { action, authedContext } from "../context.js";
 import { saveManifest } from "../deploy/manifest-store.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
-import { blockPriceToUsdPerMonth } from "../output/price.js";
+import { consoleDeploymentUrl } from "../output/console-url.js";
+import { blockPriceToUsdPerMonth, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
+import { assertSdlValid } from "../sdl/validate.js";
 
-function parseUsd(value: string, flag: string): number {
+function parseUsd(value: string, flag: string, min = 0): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) {
     throw new AxiError({ code: "usage", message: `${flag} must be a positive USD amount, got "${value}".` });
+  }
+  if (n < min) {
+    throw new AxiError({ code: "usage", message: `${flag} must be at least ${formatUsd(min)} (minimum deposit), got ${formatUsd(n)}.` });
   }
   return n;
 }
@@ -69,7 +74,7 @@ export function registerDeployment(program: Command): void {
     .description("Show a deployment's state, escrow (USD) and leases")
     .action(
       action(async (dseq: string, _opts: unknown, command: Command) => {
-        const { client } = authedContext(command);
+        const { client, config } = authedContext(command);
         const data = unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), {
           dseq
         }).data;
@@ -80,6 +85,7 @@ export function registerDeployment(program: Command): void {
         printResult(
           {
             dseq: data.deployment.id.dseq,
+            console: consoleDeploymentUrl(config.consoleWebUrl, data.deployment.id.dseq),
             state: data.deployment.state,
             createdAt: data.deployment.created_at,
             escrow: {
@@ -111,7 +117,7 @@ export function registerDeployment(program: Command): void {
     .description("Live readiness, service URIs and forwarded ports")
     .action(
       action(async (dseq: string, _opts: unknown, command: Command) => {
-        const { client } = authedContext(command);
+        const { client, config } = authedContext(command);
         const data = unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), {
           dseq
         }).data;
@@ -134,6 +140,7 @@ export function registerDeployment(program: Command): void {
 
         const result: Record<string, unknown> = {
           dseq,
+          console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
           state: data.deployment.state,
           ready,
           services: services.length > 0 ? services : "0 services reporting yet"
@@ -152,17 +159,24 @@ export function registerDeployment(program: Command): void {
     .command("create")
     .description("Create a deployment on-chain (managed wallet signs server-side)")
     .requiredOption("--sdl <file|->", "SDL YAML file path, or - for stdin")
-    .requiredOption("--deposit <usd>", "deposit amount in USD (e.g. 5)")
+    .requiredOption("--deposit <usd>", "deposit amount in USD (minimum 0.5)")
+    .option("--skip-validation", "skip client-side SDL validation before creating the deployment")
     .action(
-      action(async (opts: { sdl: string; deposit: string }, command: Command) => {
-        const { client } = authedContext(command);
+      action(async (opts: { sdl: string; deposit: string; skipValidation?: boolean }, command: Command) => {
+        const { client, config } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
-        const deposit = parseUsd(opts.deposit, "--deposit");
+        if (!opts.skipValidation) assertSdlValid(sdl);
+        const deposit = parseUsd(opts.deposit, "--deposit", MIN_DEPOSIT_USD);
         const data = unwrap(await client.POST("/v1/deployments", { body: { data: { sdl, deposit } } })).data;
         // Cache the manifest so `lease create` can send it without a manual arg.
         saveManifest(data.dseq, data.manifest);
         printResult(
-          { dseq: data.dseq, txHash: data.signTx.transactionHash, state: "open" },
+          {
+            dseq: data.dseq,
+            console: consoleDeploymentUrl(config.consoleWebUrl, data.dseq),
+            txHash: data.signTx.transactionHash,
+            state: "open"
+          },
           {
             help: [
               `console-axi bid list --dseq ${data.dseq}`,
@@ -177,14 +191,19 @@ export function registerDeployment(program: Command): void {
     .command("update <dseq>")
     .description("Update a deployment's SDL")
     .requiredOption("--sdl <file|->", "new SDL YAML file path, or - for stdin")
+    .option("--skip-validation", "skip client-side SDL validation before updating the deployment")
     .action(
-      action(async (dseq: string, opts: { sdl: string }, command: Command) => {
-        const { client } = authedContext(command);
+      action(async (dseq: string, opts: { sdl: string; skipValidation?: boolean }, command: Command) => {
+        const { client, config } = authedContext(command);
         const sdl = readFileOrStdin(opts.sdl);
+        if (!opts.skipValidation) assertSdlValid(sdl);
         unwrap(await client.PUT("/v1/deployments/{dseq}", { params: { path: { dseq } }, body: { data: { sdl } } }), {
           dseq
         });
-        printResult({ ok: true, dseq, updated: true }, { help: [`console-axi deployment status ${dseq}`] });
+        printResult(
+          { ok: true, dseq, console: consoleDeploymentUrl(config.consoleWebUrl, dseq), updated: true },
+          { help: [`console-axi deployment status ${dseq}`] }
+        );
       })
     );
 
@@ -193,15 +212,16 @@ export function registerDeployment(program: Command): void {
     .description("Close a deployment (idempotent: already-closed is a no-op)")
     .action(
       action(async (dseq: string, _opts: unknown, command: Command) => {
-        const { client } = authedContext(command);
+        const { client, config } = authedContext(command);
+        const consoleUrl = consoleDeploymentUrl(config.consoleWebUrl, dseq);
         const res = await client.DELETE("/v1/deployments/{dseq}", { params: { path: { dseq } } });
         // Already-closed deployments should not be an error (AXI principle: idempotent).
         if (res.response.status === 404 || res.response.status === 400) {
-          printResult({ ok: true, dseq, state: "closed", note: "already closed (no-op)" });
+          printResult({ ok: true, dseq, console: consoleUrl, state: "closed", note: "already closed (no-op)" });
           return;
         }
         unwrap(res, { dseq });
-        printResult({ ok: true, dseq, state: "closed" });
+        printResult({ ok: true, dseq, console: consoleUrl, state: "closed" });
       })
     );
 
@@ -211,11 +231,11 @@ export function registerDeployment(program: Command): void {
     .requiredOption("--amount <usd>", "amount to add in USD")
     .action(
       action(async (dseq: string, opts: { amount: string }, command: Command) => {
-        const { client } = authedContext(command);
+        const { client, config } = authedContext(command);
         const deposit = parseUsd(opts.amount, "--amount");
         unwrap(await client.POST("/v1/deposit-deployment", { body: { data: { dseq, deposit } } }), { dseq });
         printResult(
-          { ok: true, dseq, deposited: formatUsd(deposit) },
+          { ok: true, dseq, console: consoleDeploymentUrl(config.consoleWebUrl, dseq), deposited: formatUsd(deposit) },
           { help: [`console-axi deployment view ${dseq}`] }
         );
       })

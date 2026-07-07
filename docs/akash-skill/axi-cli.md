@@ -25,10 +25,28 @@ console-axi login --with-key <key>     # or: export CONSOLE_API_KEY=<key>
 console-axi whoami
 ```
 
+## Building & screening an SDL
+
+Scaffold with `sdl init` (never hand-write pricing), then validate and probe supply
+before spending a deposit:
+
+```
+console-axi sdl templates                                   # list scaffolds: web, gpu, multi-service, ip-lease
+console-axi sdl init web --image nginx:1.27 --port 80 > app.yml
+console-axi sdl validate app.yml                            # offline schema + best-practice checks
+console-axi sdl screen app.yml                              # live: providers whose inventory could match
+```
+
+Pricing is always denominated in `uact` (micro-ACT, pegged 1:1 to USD); `uakt` no
+longer exists and is rejected. Deposits are in USD with a **$0.5 minimum**. `deploy`,
+`deployment create` and `deployment update` validate the SDL client-side (bypass with
+`--skip-validation`); `deploy` also aborts before spending when zero providers match
+(bypass with `--skip-screening`).
+
 ## Deploy in one command
 
 ```
-console-axi deploy --sdl app.yml --deposit 5
+console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
 Creates the deployment, waits for bids, accepts the cheapest, creates the lease,
@@ -39,7 +57,7 @@ Flags: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>
 Atomic equivalents (mapping to `@deployment-endpoints.md`):
 
 ```
-console-axi deployment create --sdl app.yml --deposit 5
+console-axi deployment create --sdl app.yml --deposit 0.5
 console-axi bid list --dseq <dseq>
 console-axi lease create --dseq <dseq> --gseq 1 --oseq 1 --provider <addr> --manifest
 ```
@@ -50,7 +68,7 @@ console-axi lease create --dseq <dseq> --gseq 1 --oseq 1 --provider <addr> --man
 console-axi deployment list
 console-axi deployment status <dseq>     # live readiness, URIs, forwarded ports
 console-axi deployment view <dseq>       # state, escrow (USD), leases
-console-axi deployment deposit <dseq> --amount 5
+console-axi deployment deposit <dseq> --amount 0.5
 console-axi deployment close <dseq>      # idempotent
 ```
 
@@ -86,8 +104,3 @@ console-axi jwt create --ttl 300 --scope logs,shell
 
 TOON on stdout. Exit codes: 0 = success or idempotent no-op, 1 = error, 2 = usage.
 Errors are structured (`error: { code, exit, message }`) with a `help[]` block.
-
-> SDL authoring/pricing/bid-screening (`sdl init|validate|estimate|screen`,
-> `deploy --skip-screening`) are landing in console-axi; add a "Building & screening
-> an SDL" section here once released so this maps 1:1 to the pricing and
-> bid-screening endpoints in `@deployment-endpoints.md`.

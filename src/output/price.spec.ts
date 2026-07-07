@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { blockPriceToUsdPerMonth, formatUsd, rawAmount, uactToUsd } from "./price.js";
+import { blockPriceToUsdPerMonth, formatUsd, MIN_DEPOSIT_USD, rawAmount, uactToUsd } from "./price.js";
 
 describe("uactToUsd", () => {
   it("converts micro-ACT to USD 1:1 (amount / 1e6)", () => {
@@ -31,5 +31,12 @@ describe("rawAmount", () => {
   it("coerces string amounts to numbers for exact comparison", () => {
     expect(rawAmount("100")).toBe(100);
     expect(rawAmount(250)).toBe(250);
+  });
+});
+
+describe("MIN_DEPOSIT_USD", () => {
+  it("is the $0.50 minimum deposit and formats as shown in errors", () => {
+    expect(MIN_DEPOSIT_USD).toBe(0.5);
+    expect(formatUsd(MIN_DEPOSIT_USD)).toBe("$0.50");
   });
 });

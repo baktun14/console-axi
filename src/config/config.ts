@@ -9,12 +9,15 @@ export const DEFAULT_BASE_URL = "https://console-api.akash.network";
 // the console-provider-proxy host (that only serves the server-side HTTP proxy).
 export const DEFAULT_PROVIDER_PROXY_URL = "https://console.akash.network/provider-proxy-%{NETWORK}";
 export const DEFAULT_NETWORK = "mainnet";
+// Base of the Console web app, used to build deployment deep-links for humans.
+export const DEFAULT_CONSOLE_WEB_URL = "https://console.akash.network";
 
 export interface StoredConfig {
   apiKey?: string;
   baseUrl?: string;
   providerProxyUrl?: string;
   network?: string;
+  consoleWebUrl?: string;
 }
 
 /** Fully-resolved settings for a single invocation. */
@@ -23,6 +26,7 @@ export interface ResolvedConfig {
   baseUrl: string;
   providerProxyUrl: string;
   network: string;
+  consoleWebUrl: string;
 }
 
 export interface Overrides {
@@ -75,7 +79,14 @@ export function resolveConfig(overrides: Overrides = {}): ResolvedConfig {
   const providerProxyUrl = (
     process.env.CONSOLE_PROVIDER_PROXY_URL ?? stored.providerProxyUrl ?? DEFAULT_PROVIDER_PROXY_URL
   ).replace("%{NETWORK}", network);
-  return { apiKey, baseUrl: stripTrailingSlash(baseUrl), providerProxyUrl: stripTrailingSlash(providerProxyUrl), network };
+  const consoleWebUrl = process.env.CONSOLE_WEB_URL ?? stored.consoleWebUrl ?? DEFAULT_CONSOLE_WEB_URL;
+  return {
+    apiKey,
+    baseUrl: stripTrailingSlash(baseUrl),
+    providerProxyUrl: stripTrailingSlash(providerProxyUrl),
+    network,
+    consoleWebUrl: stripTrailingSlash(consoleWebUrl)
+  };
 }
 
 /** Resolve config and assert an API key is present, else a friendly auth error. */
