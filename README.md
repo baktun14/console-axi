@@ -34,7 +34,7 @@ console-axi sdl templates                                   # list scaffolds: we
 console-axi sdl init web --image nginx:1.27 --port 80 > app.yml   # generate SDL YAML (stdout)
 console-axi sdl validate app.yml                            # offline: schema + best-practice checks (exit 2 if invalid)
 console-axi sdl screen app.yml                              # live: which providers could bid (no key)
-console-axi deploy --sdl app.yml --deposit 5
+console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
 `sdl init` common flags: `--image --port --as --cpu --memory --storage --count --price --env K=V` (plus `--gpu --gpu-model` for the `gpu` template). It prints raw YAML to stdout, so redirect to a file or pipe into `sdl validate -`.
@@ -44,10 +44,10 @@ This is designed to be **agent-driven**: the packaged [Agent Skill](./skills/con
 ## Deploy in one command
 
 ```bash
-console-axi deploy --sdl app.yml --deposit 5
+console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
-Creates the deployment, waits for bids, accepts the cheapest, creates the lease, waits until the workload is ready, and prints the live service URIs. On failure it leaves the deployment **open** and prints the exact retry/close command, then exits non-zero.
+Creates the deployment, waits for bids, accepts the cheapest, creates the lease, waits until the workload is ready, and prints the live service URIs. On failure it leaves the deployment **open** and prints the exact retry/close command, then exits non-zero. Deposits are in USD; the minimum is **$0.5** (values below are rejected client-side).
 
 Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>`.
 
@@ -145,7 +145,7 @@ Run the real `console-axi` binary during development with `npm link`.
 
 This makes real on-chain deployments and spends a small amount of real funds.
 Point at a non-prod console-api with `--url` / `CONSOLE_API_URL` if you have one;
-otherwise `--deposit 5` followed by an immediate `close` keeps the cost minimal.
+otherwise `--deposit 0.5` (the minimum) followed by an immediate `close` keeps the cost minimal.
 
 ```bash
 export CONSOLE_API_KEY=<your-key>     # from the Console web UI: /user/api-keys
