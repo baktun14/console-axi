@@ -2,6 +2,7 @@ import type { Command } from "commander";
 
 import { unwrap } from "../api/client.js";
 import {
+  formatServiceUris,
   formatUsd,
   isDeploymentReady,
   type RawDeploymentEntry,
@@ -128,7 +129,7 @@ export function registerDeployment(program: Command): void {
           Object.values(lease.status?.services ?? {}).map((svc) => ({
             service: svc.name,
             ready: `${svc.ready_replicas}/${svc.replicas}`,
-            uris: svc.uris.length > 0 ? svc.uris.join(" ") : "-"
+            uris: formatServiceUris(svc.uris)
           }))
         );
 
