@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/baktun14/console-axi/compare/v1.0.0...v1.0.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* land stranded SDL/Console-URL features + correct the skill (uact, $0.5) ([#8](https://github.com/baktun14/console-axi/issues/8)) ([982d807](https://github.com/baktun14/console-axi/commit/982d8071f3371860dca9f37aad7ad1d585f05af5))
+
 ## 1.0.0 (2026-07-06)
 
 
