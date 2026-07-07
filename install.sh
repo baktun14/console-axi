@@ -20,11 +20,21 @@ err() { echo "install.sh: error: $*" >&2; exit 1; }
 info() { echo "$*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-download() { # url dest
+download() { # url dest [quiet]
+  # Show a progress bar for interactive installs (stderr is a TTY); stay silent
+  # for the tiny SHA256SUMS fetch and in non-interactive/piped contexts.
   if have curl; then
-    curl -fsSL "$1" -o "$2"
+    if [ "${3:-}" != quiet ] && [ -t 2 ]; then
+      curl -fSL --progress-bar "$1" -o "$2"
+    else
+      curl -fsSL "$1" -o "$2"
+    fi
   elif have wget; then
-    wget -qO "$2" "$1"
+    if [ "${3:-}" != quiet ] && [ -t 2 ]; then
+      wget -q --show-progress -O "$2" "$1"
+    else
+      wget -qO "$2" "$1"
+    fi
   else
     err "need curl or wget"
   fi
@@ -43,7 +53,7 @@ detect_asset() {
     arm64 | aarch64) arch=arm64 ;;
     *) err "unsupported architecture '$arch'" ;;
   esac
-  ASSET="console-axi-${os}-${arch}"
+  ASSET="console-axi-${os}-${arch}.gz"
 }
 
 verify_checksum() { # file sumsfile asset
@@ -83,14 +93,18 @@ do_install() {
   download "$url" "$tmp/$ASSET" ||
     err "download failed. If the repo is private, run: gh release download -R $REPO -p '$ASSET'"
 
-  if download "$sums" "$tmp/SHA256SUMS" 2>/dev/null; then
+  if download "$sums" "$tmp/SHA256SUMS" quiet 2>/dev/null; then
     verify_checksum "$tmp/$ASSET" "$tmp/SHA256SUMS" "$ASSET"
   else
     info "warning: SHA256SUMS not found; skipping checksum verification"
   fi
 
   mkdir -p "$BIN_DIR"
-  mv "$tmp/$ASSET" "$BIN_DIR/$BIN_NAME"
+  # Decompress the gzip asset into the final binary.
+  gunzip -c "$tmp/$ASSET" > "$tmp/$BIN_NAME" 2>/dev/null ||
+    gzip -dc "$tmp/$ASSET" > "$tmp/$BIN_NAME" ||
+    err "failed to decompress $ASSET"
+  mv "$tmp/$BIN_NAME" "$BIN_DIR/$BIN_NAME"
   chmod +x "$BIN_DIR/$BIN_NAME"
   info "installed $BIN_DIR/$BIN_NAME"
 

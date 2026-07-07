@@ -17,6 +17,9 @@ for target in $TARGETS; do
   suffix=${target#bun-}                     # e.g. darwin-arm64
   echo "building console-axi-$suffix ..."
   bun build "$ENTRY" --compile --minify --target="$target" --outfile "$OUT/console-axi-$suffix"
+  # Ship a gzip-compressed asset (smaller download); -k keeps the raw binary so
+  # this transition release still serves pre-.gz self-upgrades. See install.sh.
+  gzip -9 -kf "$OUT/console-axi-$suffix"     # -> console-axi-$suffix.gz
 done
 
 # Regenerate the packaged skill so the release also ships the current SKILL.md.
