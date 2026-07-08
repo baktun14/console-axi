@@ -12,8 +12,6 @@ curl -fsSL https://raw.githubusercontent.com/baktun14/console-axi/main/install.s
 
 Installs a self-contained binary to `~/.local/bin` (no Node required; macOS/Linux, arm64/x64) and wires up the Claude Code session hook + skill. Update with `console-axi upgrade`; remove with `console-axi uninstall` (add `--purge` to also drop the stored API key).
 
-Prefer npm? `npm install -g console-axi` (Node.js >= 20) or `npx -y console-axi`.
-
 ## Authenticate
 
 Get an API key from the [Console web UI](https://console.akash.network) (`/user/api-keys`) or with `console-axi apikey create`.
