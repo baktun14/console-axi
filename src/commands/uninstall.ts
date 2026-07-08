@@ -11,7 +11,7 @@ import { removeClaudeHook, removeClaudeSkill } from "./setup.js";
 export function registerUninstall(program: Command): void {
   program
     .command("uninstall")
-    .description("Remove console-axi: the session hook, the installed skill, and (with --self) the binary")
+    .description("Remove console-axi: the session hook, the installed skill, and the binary (--no-self keeps it)")
     .option("--no-hook", "keep the Claude session hook")
     .option("--no-skill", "keep the installed Claude skill")
     .option("--no-self", "keep the console-axi binary in place")
