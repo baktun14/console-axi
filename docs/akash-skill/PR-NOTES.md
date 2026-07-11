@@ -33,9 +33,9 @@ Edit `skills/akash/SKILL.md` — in the "Choosing a Deployment Method" table, th
 ## Keeping it in sync
 `axi-cli.md` is adapted from this repo's `src/skill/skill-content.ts` (the single
 source of truth for console-axi's own skill). Re-sync on console-axi releases.
-When SDL authoring/screening lands in console-axi (`sdl init|validate|estimate|screen`),
-add the "Building & screening an SDL" section flagged at the bottom of `axi-cli.md` —
-it maps to the pricing + bid-screening endpoints the Console API method already covers.
+SDL authoring/screening (`sdl init|validate|screen`) has landed and `axi-cli.md`
+already covers it in its "Building & screening an SDL" section — it maps to the
+pricing + bid-screening endpoints the Console API method already covers.
 
 ## Install linkage
 `axi-cli.md` points users at the console-axi one-liner:
