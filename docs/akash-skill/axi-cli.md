@@ -59,8 +59,10 @@ Atomic equivalents (mapping to `@deployment-endpoints.md`):
 ```
 console-axi deployment create --sdl app.yml --deposit 0.5
 console-axi bid list --dseq <dseq>
-console-axi lease create --dseq <dseq> --gseq 1 --oseq 1 --provider <addr> --manifest
+console-axi lease create --dseq <dseq> --gseq 1 --oseq 1 --provider <addr>
 ```
+
+(`lease create` reuses the manifest cached by `deployment create`; pass `--manifest <file|->` to override.)
 
 ## Manage deployments
 

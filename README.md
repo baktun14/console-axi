@@ -35,7 +35,7 @@ console-axi sdl screen app.yml                              # live: which provid
 console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
-`sdl init` common flags: `--image --port --as --cpu --memory --storage --count --price --env K=V` (plus `--gpu --gpu-model` for the `gpu` template). It prints raw YAML to stdout, so redirect to a file or pipe into `sdl validate -`.
+`sdl init` common flags: `--image --port --as --name --cpu --memory --storage --count --price --env K=V` (plus `--gpu --gpu-model` for the `gpu` template). It prints raw YAML to stdout, so redirect to a file or pipe into `sdl validate -`.
 
 This is designed to be **agent-driven**: the packaged [Agent Skill](./skills/console-axi/SKILL.md) teaches an agent to interview the user and run this loop, so no interactive prompts are needed. `deploy`, `deployment create` and `deployment update` also validate the SDL client-side first (bypass with `--skip-validation`).
 
@@ -45,9 +45,9 @@ This is designed to be **agent-driven**: the packaged [Agent Skill](./skills/con
 console-axi deploy --sdl app.yml --deposit 0.5
 ```
 
-Creates the deployment, waits for bids, accepts the cheapest, creates the lease, waits until the workload is ready, and prints the live service URIs. On failure it leaves the deployment **open** and prints the exact retry/close command, then exits non-zero. Deposits are in USD; the minimum is **$0.5** (values below are rejected client-side).
+Screens the network for capable providers (aborts before spending if none match), creates the deployment, waits for bids, accepts the cheapest, creates the lease, waits until the workload is ready, and prints the live service URIs. On failure it leaves the deployment **open** and prints the exact retry/close command, then exits non-zero. Deposits are in USD; the minimum is **$0.5** (values below are rejected client-side).
 
-Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>`.
+Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <s>`, `--skip-validation`, `--skip-screening`.
 
 ## Command surface
 
@@ -59,8 +59,9 @@ Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <
 | Deployments | `deployment list\|view\|status\|create\|update\|close\|deposit` |
 | Market | `bid list --dseq <dseq>`, `lease create ...` |
 | Debug | `logs <dseq> [--follow]`, `events <dseq> [--follow]`, `exec <dseq> --service <s> -- <cmd>`, `shell <dseq> --service <s>` |
-| Wallet | `wallet`, `wallet balance`, `wallet settings`, `wallet cost`, `usage` |
+| Wallet | `wallet list\|balance\|settings\|cost`, `usage` |
 | Keys/tokens | `apikey list\|create\|delete`, `jwt create` |
+| Lifecycle | `upgrade`, `uninstall` |
 
 Run `console-axi` with no arguments for a live status home view, or `console-axi <command> --help` for details.
 
@@ -81,7 +82,7 @@ console-axi setup                 # installs the session hook + Claude skill
 console-axi uninstall             # removes them (and the binary; --no-self to keep it)
 ```
 
-`setup` installs a SessionStart hook that injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session, and installs the [Agent Skill](./skills/console-axi/SKILL.md) into `~/.claude/skills/`. `install.sh` runs `setup` for you. Both honor `CLAUDE_CONFIG_DIR`.
+`setup` installs a SessionStart hook that injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session, and installs the [Agent Skill](./skills/console-axi/SKILL.md) into `~/.claude/skills/`. `install.sh` runs `setup` for you. Both honor `CLAUDE_CONFIG_DIR`. For other agents, `setup --agent codex|opencode` prints the hook command to add to that agent's config instead.
 
 ## Configuration
 
