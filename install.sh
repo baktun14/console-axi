@@ -111,6 +111,7 @@ do_install() {
   # Install the Claude session hook + skill via the freshly installed binary.
   "$BIN_DIR/$BIN_NAME" setup >/dev/null 2>&1 ||
     info "note: run '$BIN_NAME setup' to install the agent hook + skill"
+  info "hint: enable tab-completion with: $BIN_NAME completion <bash|zsh|fish>"
 
   echo ""
   echo "console-axi installed."
