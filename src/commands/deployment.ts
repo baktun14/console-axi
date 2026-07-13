@@ -7,7 +7,8 @@ import {
   type RawLease,
   statusSnapshot,
   summarizeDeployment,
-  uactToUsd
+  uactToUsd,
+  watchOutcome
 } from "../api/deployment-format.js";
 import { action, authedContext } from "../context.js";
 import { saveManifest } from "../deploy/manifest-store.js";
@@ -18,6 +19,7 @@ import { blockPriceToUsdPerMonth, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
 import { humanDuration } from "../output/units.js";
 import { assertSdlValid } from "../sdl/validate.js";
+import { sleep } from "../util/poll.js";
 
 function parseUsd(value: string, flag: string, min = 0): number {
   const n = Number(value);
@@ -138,19 +140,80 @@ export function registerDeployment(program: Command): void {
   deployment
     .command("status <dseq>")
     .description("Live readiness, service URIs and forwarded ports")
+    .option("--watch", "poll until the deployment is ready, closed, or the timeout passes")
+    .option("--interval <seconds>", "poll interval with --watch", "5")
+    .option("--timeout <seconds>", "max seconds to watch (0 = no deadline)", "600")
     .action(
-      action(async (dseq: string, _opts: unknown, command: Command) => {
+      action(async (dseq: string, opts: { watch?: boolean; interval: string; timeout: string }, command: Command) => {
         const { client, config } = authedContext(command);
-        const data = unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), {
-          dseq
-        }).data;
-        const { result, ready } = statusSnapshot(dseq, consoleDeploymentUrl(config.consoleWebUrl, dseq), data);
+        const consoleUrl = consoleDeploymentUrl(config.consoleWebUrl, dseq);
+        const fetchSnapshot = async () =>
+          statusSnapshot(
+            dseq,
+            consoleUrl,
+            unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), { dseq }).data
+          );
 
-        printResult(result, {
-          help: ready
-            ? [`console-axi logs ${dseq} --tail 100`]
-            : [`console-axi deployment status ${dseq}`, `console-axi events ${dseq}`]
-        });
+        if (!opts.watch) {
+          const { result, ready } = await fetchSnapshot();
+          printResult(result, {
+            help: ready
+              ? [`console-axi logs ${dseq} --tail 100`]
+              : [`console-axi deployment status ${dseq}`, `console-axi events ${dseq}`]
+          });
+          return;
+        }
+
+        const intervalMs = Number(opts.interval) * 1000;
+        const deadlineMs = Number(opts.timeout) * 1000;
+        if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+          throw new AxiError({ code: "usage", message: `--interval must be a positive number of seconds, got "${opts.interval}".` });
+        }
+
+        // Each poll prints a complete snapshot (agents re-parse the last block);
+        // help[] only on the terminal one. SIGINT ends the watch cleanly.
+        let interrupted = false;
+        process.once("SIGINT", () => (interrupted = true));
+        const startedAt = Date.now();
+        let polls = 0;
+
+        for (;;) {
+          const { result, ready, state } = await fetchSnapshot();
+          polls++;
+          const outcome = watchOutcome(state, ready);
+          const elapsed = Math.round((Date.now() - startedAt) / 1000);
+          const deadlineExceeded = deadlineMs > 0 && Date.now() - startedAt >= deadlineMs;
+
+          if (outcome === "ready" || interrupted) {
+            printResult(
+              { ...result, at: new Date().toISOString(), watch: { polls, elapsed: `${elapsed}s`, outcome: interrupted ? "interrupted" : outcome } },
+              { help: [`console-axi logs ${dseq} --tail 100`] }
+            );
+            return;
+          }
+          if (outcome === "closed") {
+            printResult({ ...result, at: new Date().toISOString(), watch: { polls, elapsed: `${elapsed}s`, outcome } });
+            throw new AxiError({
+              code: "api_error",
+              message: `Deployment ${dseq} closed while watching; it can never become ready.`,
+              details: { dseq }
+            });
+          }
+          if (deadlineExceeded) {
+            printResult({ ...result, at: new Date().toISOString(), watch: { polls, elapsed: `${elapsed}s`, outcome: "timeout" } });
+            throw new AxiError({
+              code: "timeout",
+              message: `Deployment ${dseq} did not become ready within ${opts.timeout}s.`,
+              details: { dseq },
+              help: [`console-axi logs ${dseq} --tail 100`, `console-axi events ${dseq}`]
+            });
+          }
+
+          printResult({ ...result, at: new Date().toISOString() });
+          process.stdout.write("\n");
+          await sleep(intervalMs);
+          if (interrupted) continue; // print one final snapshot, then exit above
+        }
       })
     );
 
