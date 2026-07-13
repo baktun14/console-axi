@@ -25,7 +25,7 @@ console-axi whoami
 
 ## Formulate an SDL
 
-Every deployment needs a valid [SDL](https://akash.network/docs/getting-started/stack-definition-language/) (the YAML that describes your app). The `sdl` commands help you scaffold, validate and price-check one **before** you deploy — validation runs entirely client-side (the Console API has no validate endpoint) via [`@akashnetwork/chain-sdk`](https://www.npmjs.com/package/@akashnetwork/chain-sdk) plus a few best-practice lint rules.
+Every deployment needs a valid [SDL](https://akash.network/docs/getting-started/stack-definition-language/) (the YAML that describes your app). The `sdl` commands help you scaffold and validate one **before** you deploy — validation runs entirely client-side (the Console API has no validate endpoint) via [`@akashnetwork/chain-sdk`](https://www.npmjs.com/package/@akashnetwork/chain-sdk) plus a few best-practice lint rules.
 
 ```bash
 console-axi sdl templates                                   # list scaffolds: web, gpu, multi-service, ip-lease

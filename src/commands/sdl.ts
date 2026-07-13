@@ -1,17 +1,13 @@
 import type { Command } from "commander";
 
-import { unwrap } from "../api/client.js";
 import { action, anonContext } from "../context.js";
 import { AxiError, EXIT } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
-import { formatUsd } from "../output/price.js";
 import { printResult } from "../output/render.js";
-import { cpuCores, humanBytes } from "../output/units.js";
-import { aggregateSpec, hasGpu } from "../sdl/estimate.js";
-import { deriveResources } from "../sdl/resources.js";
 import { buildRequirements, type ScreenRequirements, screenSupply, summarizeIncidents } from "../sdl/screen.js";
 import { toYaml } from "../sdl/serialize.js";
 import { summarizeSdl } from "../sdl/summary.js";
+import { synthesizeSdl } from "../sdl/synthesize.js";
 import { cpuUnits } from "../sdl/templates/common.js";
 import { getTemplate, listTemplates } from "../sdl/templates/registry.js";
 import type { InitOptions } from "../sdl/templates/types.js";
@@ -25,75 +21,6 @@ export function registerSdl(program: Command): void {
   registerInit(sdl);
   registerValidate(sdl);
   registerScreen(sdl);
-  registerPrice(sdl);
-}
-
-function registerPrice(sdl: Command): void {
-  sdl
-    .command("price [file]")
-    .description("Estimate monthly USD cost on Akash vs AWS/GCP/Azure, from an SDL and/or resource flags")
-    .option("--cpu <units>", "cpu units, e.g. 0.5 or 500m")
-    .option("--memory <size>", "memory size, e.g. 512Mi, 2Gi")
-    .option("--storage <size>", "storage size, e.g. 1Gi")
-    .option("--gpu <n>", "gpu units (excluded from the estimate; see note)")
-    .option("--gpu-model <model>", "nvidia gpu model, e.g. a100")
-    .option("--count <n>", "replica count")
-    .action(
-      action(async (file: string | undefined, opts: RawScreenOptions, command: Command) => {
-        const initOpts = toInitOptions({ ...opts, env: [] });
-        const hasResourceFlags =
-          opts.cpu !== undefined ||
-          opts.memory !== undefined ||
-          opts.storage !== undefined ||
-          opts.gpu !== undefined ||
-          opts.gpuModel !== undefined ||
-          opts.count !== undefined;
-
-        if (!file && !hasResourceFlags) {
-          throw new AxiError({
-            code: "usage",
-            message: "Provide an SDL file or resource flags (e.g. --cpu 2 --memory 4Gi) to price.",
-            help: ["console-axi sdl price app.yml", "console-axi sdl price --cpu 2 --memory 4Gi --storage 10Gi"]
-          });
-        }
-
-        const parsed = file ? loadValidSdl(file) : synthesizeSdl(initOpts);
-        if (file && hasResourceFlags) applyResourceOverrides(parsed, initOpts);
-
-        const resources = deriveResources(parsed);
-        const spec = aggregateSpec(resources);
-        const estimate = unwrap(
-          await anonContext(command).client.POST("/v1/pricing", { body: spec })
-        ) as { akash: number; aws: number; gcp: number; azure: number };
-
-        const cheapestCloud = Math.min(estimate.aws, estimate.gcp, estimate.azure);
-        const result: Record<string, unknown> = {
-          spec: {
-            cpu: `${cpuCores(spec.cpu)} cores`,
-            memory: humanBytes(spec.memory),
-            storage: humanBytes(spec.storage)
-          },
-          monthly: {
-            akash: formatUsd(estimate.akash),
-            aws: formatUsd(estimate.aws),
-            gcp: formatUsd(estimate.gcp),
-            azure: formatUsd(estimate.azure)
-          }
-        };
-        if (cheapestCloud > 0) {
-          result.savingsVsCheapestCloud = `${Math.round((1 - estimate.akash / cheapestCloud) * 100)}%`;
-        }
-        if (hasGpu(resources)) {
-          result.note =
-            "GPU excluded — /v1/pricing covers cpu/memory/storage only. See `console-axi gpu list` for GPU market rates.";
-        }
-
-        const deployHelp = file
-          ? `console-axi deploy --sdl ${file} --deposit <usd>`
-          : "console-axi sdl init <scaffold> [flags] > app.yml";
-        printResult(result, { help: [file ? `console-axi sdl screen ${file}` : "console-axi sdl screen --cpu 1 --memory 1Gi --storage 1Gi", deployHelp] });
-      })
-    );
 }
 
 function registerTemplates(sdl: Command): void {
@@ -253,18 +180,6 @@ function loadValidSdl(file: string): SdlDoc {
       message: `SDL is invalid: ${errors.map((e) => e.message).join("; ")}`,
       help: [`console-axi sdl validate ${file}`]
     });
-  }
-  return parsed;
-}
-
-/** Build a throwaway SDL from resource flags (via a template) so chain-sdk does the unit math. */
-function synthesizeSdl(o: InitOptions): SdlDoc {
-  const templateName = o.gpu !== undefined || o.gpuModel !== undefined ? "gpu" : "web";
-  const template = getTemplate(templateName);
-  if (!template) throw new AxiError({ code: "internal", message: `Missing "${templateName}" template.` });
-  const { valid, errors, parsed } = validateSdl(toYaml(template.build(o)));
-  if (!valid || !parsed) {
-    throw new AxiError({ code: "internal", message: `Synthesized SDL failed validation: ${errors.map((e) => e.message).join("; ")}` });
   }
   return parsed;
 }
