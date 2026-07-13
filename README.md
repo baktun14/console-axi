@@ -116,10 +116,16 @@ Three tiers, fastest first.
 
 ```bash
 npm test             # unit tests (bid selection, price, errors, TOON, ws relay, config)
+npm run test:e2e     # spawns the built CLI against a fake Console API + provider proxy
 npm run lint
 npm run typecheck
 npm run build
 ```
+
+The e2e suite (`test/e2e/`) covers the offline smoke procedure below plus auth,
+error mapping, the deploy pipeline, and the logs/exec relay — all against local
+fakes, no key or network needed. `E2E_CLI=<path>` re-runs it against a compiled
+standalone binary.
 
 ### 2. Offline CLI smoke (no key)
 
