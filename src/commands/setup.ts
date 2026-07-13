@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 
 import type { Command } from "commander";
 
+import { installCodex } from "../agents/codex.js";
+import { installOpencode } from "../agents/opencode.js";
 import { action } from "../context.js";
 import { AxiError } from "../errors.js";
 import { printResult } from "../output/render.js";
@@ -124,11 +126,11 @@ export function removeClaudeSkill(): { path: string; status: RemoveStatus } {
 export function registerSetup(program: Command): void {
   program
     .command("setup")
-    .description("Install the session hook + Claude skill so agents can drive console-axi")
+    .description("Install the session hook/instructions + skill so agents can drive console-axi")
     .option("--agent <agent>", "claude | codex | opencode", "claude")
     .option("--command <cmd>", "the hook command to run", DEFAULT_HOOK_COMMAND)
-    .option("--no-hook", "skip installing the session-start hook")
-    .option("--no-skill", "skip installing the Claude skill")
+    .option("--no-hook", "skip the session-start hook (claude) / AGENTS.md block (codex, opencode)")
+    .option("--no-skill", "skip installing the skill")
     .action(
       action((opts: { agent: string; command: string; hook: boolean; skill: boolean }) => {
         const agent = opts.agent.toLowerCase();
@@ -148,15 +150,12 @@ export function registerSetup(program: Command): void {
           return;
         }
         if (agent === "codex" || agent === "opencode") {
-          // These harnesses lack a stable file schema we can safely edit here;
-          // emit the exact command to wire up manually rather than risk
-          // corrupting the user's config.
-          printResult({
-            agent,
-            status: "manual",
-            message: `Add this command as a session-start hook in your ${agent} config:`,
-            command: opts.command
-          });
+          // Neither harness has an exec-hook mechanism, so the session-start
+          // equivalent is a managed block in its global AGENTS.md (`--no-hook`
+          // skips it) plus the packaged skill (`--no-skill` skips that).
+          const install = agent === "codex" ? installCodex : installOpencode;
+          const installed = install(opts.command, { instructions: opts.hook, skill: opts.skill });
+          printResult({ ok: true, agent, ...installed }, { help: ["console-axi", "console-axi uninstall"] });
           return;
         }
         throw new AxiError({
