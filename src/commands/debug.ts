@@ -29,7 +29,7 @@ function onInterrupt(relay: ProviderProxyRelay): () => void {
   return () => process.removeListener("SIGINT", handler);
 }
 
-export function registerProvider(program: Command): void {
+export function registerDebug(program: Command): void {
   program
     .command("logs <dseq>")
     .description("Fetch service logs (bulk by default, or --follow to stream)")

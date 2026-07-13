@@ -2,11 +2,10 @@ import type { Command } from "commander";
 
 import { unwrap } from "../api/client.js";
 import {
-  formatServiceUris,
   formatUsd,
-  isDeploymentReady,
   type RawDeploymentEntry,
   type RawLease,
+  statusSnapshot,
   summarizeDeployment,
   uactToUsd
 } from "../api/deployment-format.js";
@@ -122,31 +121,7 @@ export function registerDeployment(program: Command): void {
         const data = unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), {
           dseq
         }).data;
-        const leases = (data.leases ?? []) as RawLease[];
-        const ready = isDeploymentReady(leases);
-
-        const services = leases.flatMap((lease) =>
-          Object.values(lease.status?.services ?? {}).map((svc) => ({
-            service: svc.name,
-            ready: `${svc.ready_replicas}/${svc.replicas}`,
-            uris: formatServiceUris(svc.uris)
-          }))
-        );
-
-        const ports = leases.flatMap((lease) =>
-          Object.entries(lease.status?.forwarded_ports ?? {}).flatMap(([service, list]) =>
-            list.map((p) => ({ service, port: p.port, externalPort: p.externalPort, host: p.host ?? "-" }))
-          )
-        );
-
-        const result: Record<string, unknown> = {
-          dseq,
-          console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
-          state: data.deployment.state,
-          ready,
-          services: services.length > 0 ? services : "0 services reporting yet"
-        };
-        if (ports.length > 0) result.forwardedPorts = ports;
+        const { result, ready } = statusSnapshot(dseq, consoleDeploymentUrl(config.consoleWebUrl, dseq), data);
 
         printResult(result, {
           help: ready

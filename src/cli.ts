@@ -2,12 +2,12 @@ import { Command, CommanderError } from "commander";
 
 import { registerApiKey } from "./commands/apikey.js";
 import { registerAuth } from "./commands/auth.js";
+import { registerDebug } from "./commands/debug.js";
 import { registerDeploy } from "./commands/deploy.js";
 import { registerDeployment } from "./commands/deployment.js";
 import { registerHome } from "./commands/home.js";
 import { registerJwt } from "./commands/jwt.js";
 import { registerBid, registerLease } from "./commands/market.js";
-import { registerProvider } from "./commands/provider.js";
 import { registerSdl } from "./commands/sdl.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerShell } from "./commands/shell.js";
@@ -46,7 +46,7 @@ function buildProgram(): Command {
   registerLease(program);
   registerWallet(program);
   registerUsage(program);
-  registerProvider(program);
+  registerDebug(program);
   registerShell(program);
   registerApiKey(program);
   registerJwt(program);
