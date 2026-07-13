@@ -5,6 +5,7 @@ import { registerAuth } from "./commands/auth.js";
 import { registerDebug } from "./commands/debug.js";
 import { registerDeploy } from "./commands/deploy.js";
 import { registerDeployment } from "./commands/deployment.js";
+import { registerGpu } from "./commands/gpu.js";
 import { registerHome } from "./commands/home.js";
 import { registerJwt } from "./commands/jwt.js";
 import { registerBid, registerLease } from "./commands/market.js";
@@ -46,6 +47,7 @@ function buildProgram(): Command {
   registerLease(program);
   registerWallet(program);
   registerUsage(program);
+  registerGpu(program);
   registerDebug(program);
   registerShell(program);
   registerApiKey(program);
