@@ -17,3 +17,11 @@ export function humanBytes(bytes: number): string {
 export function cpuCores(millicores: number): string {
   return String(Math.round((millicores / 1000) * 100) / 100);
 }
+
+/** 86400000 -> "24h", 90000 -> "1.5m". */
+export function humanDuration(ms: number): string {
+  const round = (n: number): number => Math.round(n * 100) / 100;
+  if (ms >= 3_600_000) return `${round(ms / 3_600_000)}h`;
+  if (ms >= 60_000) return `${round(ms / 60_000)}m`;
+  return `${round(ms / 1000)}s`;
+}

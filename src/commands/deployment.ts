@@ -16,6 +16,7 @@ import { readFileOrStdin } from "../input.js";
 import { consoleDeploymentUrl } from "../output/console-url.js";
 import { blockPriceToUsdPerMonth, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
+import { humanDuration } from "../output/units.js";
 import { assertSdlValid } from "../sdl/validate.js";
 
 function parseUsd(value: string, flag: string, min = 0): number {
@@ -27,6 +28,28 @@ function parseUsd(value: string, flag: string, min = 0): number {
     throw new AxiError({ code: "usage", message: `${flag} must be at least ${formatUsd(min)} (minimum deposit), got ${formatUsd(n)}.` });
   }
   return n;
+}
+
+function parseBool(value: string, flag: string): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new AxiError({ code: "usage", message: `${flag} must be true or false, got "${value}".` });
+}
+
+interface DeploymentSettings {
+  dseq: string;
+  autoTopUpEnabled: boolean;
+  estimatedTopUpAmount: number;
+  topUpFrequencyMs: number;
+}
+
+function settingsBody(data: DeploymentSettings): Record<string, unknown> {
+  return {
+    dseq: data.dseq,
+    autoTopUpEnabled: data.autoTopUpEnabled,
+    estimatedTopUp: formatUsd(uactToUsd(data.estimatedTopUpAmount)),
+    topUpFrequency: humanDuration(data.topUpFrequencyMs)
+  };
 }
 
 interface Coin {
@@ -198,6 +221,52 @@ export function registerDeployment(program: Command): void {
         }
         unwrap(res, { dseq });
         printResult({ ok: true, dseq, console: consoleUrl, state: "closed" });
+      })
+    );
+
+  deployment
+    .command("settings <dseq>")
+    .description("View or set per-deployment auto-top-up (escrow refills)")
+    .option("--auto-top-up <true|false>", "enable automatic escrow top-ups for this deployment")
+    .action(
+      action(async (dseq: string, opts: { autoTopUp?: string }, command: Command) => {
+        const { client } = authedContext(command);
+
+        if (opts.autoTopUp === undefined) {
+          const res = await client.GET("/v2/deployment-settings/{dseq}", { params: { path: { dseq } } });
+          if (res.response.status === 404) {
+            printResult(
+              { dseq, autoTopUpEnabled: false, note: "no settings record yet (defaults shown)" },
+              { help: [`console-axi deployment settings ${dseq} --auto-top-up true`] }
+            );
+            return;
+          }
+          printResult(settingsBody(unwrap(res, { dseq }).data), {
+            help: [`console-axi deployment settings ${dseq} --auto-top-up <true|false>`]
+          });
+          return;
+        }
+
+        const autoTopUpEnabled = parseBool(opts.autoTopUp, "--auto-top-up");
+        const patched = await client.PATCH("/v2/deployment-settings/{dseq}", {
+          params: { path: { dseq } },
+          body: { data: { autoTopUpEnabled } }
+        });
+        // No settings row yet: fall back to creating one.
+        const data =
+          patched.response.status === 404
+            ? unwrap(await client.POST("/v2/deployment-settings", { body: { data: { dseq, autoTopUpEnabled } } })).data
+            : unwrap(patched, { dseq }).data;
+
+        printResult(
+          { ok: true, ...settingsBody(data) },
+          {
+            help: [
+              "console-axi wallet settings --auto-reload true  # the wallet-level funding source",
+              `console-axi deployment view ${dseq}`
+            ]
+          }
+        );
       })
     );
 

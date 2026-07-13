@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cpuCores, humanBytes } from "./units.js";
+import { cpuCores, humanBytes, humanDuration } from "./units.js";
 
 describe("units", () => {
   it("humanizes byte counts to binary units", () => {
@@ -16,5 +16,12 @@ describe("units", () => {
     expect(cpuCores(1000)).toBe("1");
     expect(cpuCores(500)).toBe("0.5");
     expect(cpuCores(2250)).toBe("2.25");
+  });
+
+  it("humanizes millisecond durations", () => {
+    expect(humanDuration(86_400_000)).toBe("24h");
+    expect(humanDuration(3_600_000)).toBe("1h");
+    expect(humanDuration(90_000)).toBe("1.5m");
+    expect(humanDuration(5000)).toBe("5s");
   });
 });
