@@ -232,3 +232,68 @@ export function providerHost(hostUri: string): Record<string, unknown> {
 export function leaseCreated(dseq: string): Record<string, unknown> {
   return { data: { deployment: { id: { owner: "o", dseq }, state: "active" }, leases: [] } };
 }
+
+// ---- marketplace: gpu / provider / bid-screening ----------------------------
+
+/** `/v1/gpu-prices` body from a compact per-model spec (avail == provider avail for simplicity). */
+export function gpuPrices(models: Array<{ vendor?: string; model: string; available: number; providers: number }>): Body<"/v1/gpu-prices", "get", 200> {
+  const total = models.reduce((n, m) => n + m.available, 0);
+  return {
+    availability: { total, available: total },
+    models: models.map((m) => ({
+      vendor: m.vendor ?? "nvidia",
+      model: m.model,
+      ram: "80Gi",
+      interface: "SXM5",
+      availability: { total: m.available, available: m.available },
+      providerAvailability: { total: m.providers, available: m.providers },
+      price: { currency: "USD", min: 1, max: 2, avg: 1.5, weightedAverage: 1.5, med: 1.5 }
+    }))
+  };
+}
+
+/**
+ * One `/v1/providers` list entry. The full schema item is enormous; the CLI only
+ * reads the fields below (filter/sort/row), so this stays untyped like providerHost.
+ */
+export function providerListEntry(opts: { owner: string; gpuModel?: string; online?: boolean }): Record<string, unknown> {
+  return {
+    owner: opts.owner,
+    name: `${opts.owner}.example`,
+    hostUri: `https://${opts.owner}:8443`,
+    isOnline: opts.online ?? true,
+    isAudited: true,
+    organization: "Org",
+    locationRegion: "us-west",
+    uptime1d: 1,
+    uptime7d: 1,
+    uptime30d: 1,
+    leaseCount: 3,
+    gpuModels: opts.gpuModel ? [{ vendor: "nvidia", model: opts.gpuModel, ram: "80Gi", interface: "SXM5" }] : []
+  };
+}
+
+/** `/v1/bid-screening` response — the providers that would currently bid. */
+export function screenedProviders(owners: string[]): Body<"/v1/bid-screening", "post", 200> {
+  return {
+    providers: owners.map((owner) => ({
+      owner,
+      hostUri: `https://${owner}:8443`,
+      isAudited: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      location: "us-west",
+      organization: "Org",
+      incidents: []
+    }))
+  };
+}
+
+/** Extract the requested nvidia GPU model from a bid-screening request body ("" if cpu-only). */
+export function screenedModel(requestBody: string): string {
+  const body = JSON.parse(requestBody) as {
+    resources?: Array<{ resource?: { gpu?: { attributes?: Array<{ key: string }> } } }>;
+  };
+  const attrs = body.resources?.[0]?.resource?.gpu?.attributes ?? [];
+  const key = attrs.find((a) => a.key.startsWith("vendor/nvidia/model/"))?.key ?? "";
+  return key.split("/").pop() ?? "";
+}

@@ -32,7 +32,7 @@ export function sortProviders(list: ProviderListItem[]): ProviderListItem[] {
   );
 }
 
-/** Uptime is a 0-1 fraction from the API (verified live); render as a percentage. */
+/** Uptime is a 0-1 fraction from the ~15-min-delayed /v1/providers snapshot; render as a percentage. */
 export function formatUptime(fraction: number | null | undefined): string {
   if (fraction === null || fraction === undefined) return "-";
   const pct = fraction * 100;
@@ -47,9 +47,13 @@ export function gpuSummary(models: ProviderGpu[]): string {
   return [...counts.entries()].map(([model, n]) => (n > 1 ? `${model} x${n}` : model)).join(", ");
 }
 
-/** One compact table row per provider. */
-export function providerRow(p: ProviderListItem): Record<string, unknown> {
-  return {
+/**
+ * One compact table row per provider. Pass `live` (from --live, via bid-screening)
+ * to add a real-time `live: yes/no` column indicating whether the provider would
+ * currently bid; omit it to leave the column off.
+ */
+export function providerRow(p: ProviderListItem, live?: boolean): Record<string, unknown> {
+  const row: Record<string, unknown> = {
     owner: p.owner,
     org: p.organization ?? p.name ?? "-",
     region: p.locationRegion ?? p.ipRegionCode ?? p.ipRegion ?? "-",
@@ -58,4 +62,6 @@ export function providerRow(p: ProviderListItem): Record<string, unknown> {
     leases: p.leaseCount ?? 0,
     gpus: gpuSummary(p.gpuModels)
   };
+  if (live !== undefined) row.live = live ? "yes" : "no";
+  return row;
 }

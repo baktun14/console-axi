@@ -54,6 +54,19 @@ describe("gpu formatting", () => {
     expect(row).toMatchObject({ minHr: "-", medHr: "-", maxHr: "-" });
   });
 
+  it("omits the live column when no live count is passed", () => {
+    expect(gpuRow(model())).not.toHaveProperty("live");
+  });
+
+  it("adds a live count column when --verify supplies one", () => {
+    expect(gpuRow(model(), 4)).toMatchObject({ live: "4" });
+    expect(gpuRow(model(), 0)).toMatchObject({ live: "0" });
+  });
+
+  it("marks a screening error with '?'", () => {
+    expect(gpuRow(model(), null)).toMatchObject({ live: "?" });
+  });
+
   it("sorts by available count desc, then model asc", () => {
     const models = [
       model({ model: "a100", availability: { total: 10, available: 2 } }),

@@ -5,6 +5,11 @@ import { filterProviders, formatUptime, gpuSummary, providerRow, sortProviders }
 import { action, anonContext } from "../context.js";
 import { printResult } from "../output/render.js";
 import { cpuCores, humanBytes } from "../output/units.js";
+import { screenSupply } from "../sdl/screen.js";
+import { synthesizeSdl } from "../sdl/synthesize.js";
+
+const FRESHNESS_NOTE =
+  "Listing refreshes ~every 15 min. Use --live to cross-check who would bid right now (adds a `live` column) via bid-screening.";
 
 export function registerProvider(program: Command): void {
   const provider = program.command("provider").description("Browse marketplace providers (no key needed)");
@@ -16,12 +21,21 @@ export function registerProvider(program: Command): void {
     .option("--region <region>", "filter by region, e.g. eu-west or us")
     .option("--audited", "only audited providers")
     .option("--trial", "only providers accepting trial deployments")
+    .option("--live", "cross-check who would bid right now via bid-screening (adds a `live` column)")
     .option("--limit <n>", "max rows", "20")
     .option("--all", "include offline providers and ignore --limit")
     .action(
       action(
         async (
-          opts: { gpuModel?: string; region?: string; audited?: boolean; trial?: boolean; limit: string; all?: boolean },
+          opts: {
+            gpuModel?: string;
+            region?: string;
+            audited?: boolean;
+            trial?: boolean;
+            live?: boolean;
+            limit: string;
+            all?: boolean;
+          },
           command: Command
         ) => {
           const { client } = anonContext(command);
@@ -36,15 +50,31 @@ export function registerProvider(program: Command): void {
           const rows = matched.slice(0, limit);
           if (rows.length === 0) {
             printResult(
-              { providers: "0 matched", online: `${data.filter((p) => p.isOnline).length} of ${data.length} online` },
+              {
+                providers: "0 matched",
+                online: `${data.filter((p) => p.isOnline).length} of ${data.length} online`,
+                note: FRESHNESS_NOTE
+              },
               { help: ["console-axi provider list --all", "console-axi provider regions"] }
             );
             return;
           }
+
+          // Live cross-check: one bid-screening probe (cpu-only, or a 1x GPU spec
+          // when --gpu-model is set); mark which listed providers would bid now.
+          let liveOwners: Set<string> | undefined;
+          if (opts.live) {
+            const sdl = opts.gpuModel ? synthesizeSdl({ gpu: 1, gpuModel: opts.gpuModel }) : synthesizeSdl({});
+            liveOwners = new Set((await screenSupply(client, sdl)).map((p) => p.owner));
+          }
+
+          const liveShown = liveOwners ? rows.filter((p) => liveOwners!.has(p.owner)).length : undefined;
           printResult(
             {
               count: `${rows.length} shown of ${matched.length} matched (${data.filter((p) => p.isOnline).length} online)`,
-              providers: rows.map(providerRow)
+              ...(liveShown !== undefined ? { liveBiddable: `${liveShown} of ${rows.length} would bid now` } : {}),
+              providers: rows.map((p) => providerRow(p, liveOwners ? liveOwners.has(p.owner) : undefined)),
+              note: FRESHNESS_NOTE
             },
             {
               help: [

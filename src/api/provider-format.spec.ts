@@ -136,4 +136,10 @@ describe("provider formatting", () => {
       gpus: "-"
     });
   });
+
+  it("omits the live column by default and adds yes/no when --live supplies it", () => {
+    expect(providerRow(provider())).not.toHaveProperty("live");
+    expect(providerRow(provider(), true)).toMatchObject({ live: "yes" });
+    expect(providerRow(provider(), false)).toMatchObject({ live: "no" });
+  });
 });

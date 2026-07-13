@@ -27,9 +27,14 @@ export function sortGpuModels(models: GpuModel[]): GpuModel[] {
   );
 }
 
-/** One compact table row per GPU model. Prices are hourly (verified live). */
-export function gpuRow(m: GpuModel): Record<string, string> {
-  return {
+/**
+ * One compact table row per GPU model. Availability and hourly prices come from
+ * the ~15-min-delayed /v1/gpu-prices snapshot. Pass `live` (from --verify, via
+ * bid-screening) to add a real-time biddable-provider count: a number, `null`
+ * for a screening error, or omit the arg to leave the column off entirely.
+ */
+export function gpuRow(m: GpuModel, live?: number | null): Record<string, string> {
+  const row: Record<string, string> = {
     vendor: m.vendor,
     model: m.model,
     ram: m.ram,
@@ -40,4 +45,6 @@ export function gpuRow(m: GpuModel): Record<string, string> {
     medHr: m.price ? formatUsd(m.price.med) : "-",
     maxHr: m.price ? formatUsd(m.price.max) : "-"
   };
+  if (live !== undefined) row.live = live === null ? "?" : String(live);
+  return row;
 }
