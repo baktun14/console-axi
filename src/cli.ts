@@ -13,6 +13,7 @@ import { registerProvider } from "./commands/provider.js";
 import { registerSdl } from "./commands/sdl.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerShell } from "./commands/shell.js";
+import { registerTemplate } from "./commands/template.js";
 import { registerUninstall } from "./commands/uninstall.js";
 import { registerUpgrade } from "./commands/upgrade.js";
 import { registerUsage, registerWallet } from "./commands/wallet.js";
@@ -42,6 +43,7 @@ function buildProgram(): Command {
   registerAuth(program);
   registerSetup(program);
   registerSdl(program);
+  registerTemplate(program);
   registerDeploy(program);
   registerDeployment(program);
   registerBid(program);
