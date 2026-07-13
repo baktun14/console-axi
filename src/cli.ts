@@ -14,6 +14,7 @@ import { registerShell } from "./commands/shell.js";
 import { registerUninstall } from "./commands/uninstall.js";
 import { registerUpgrade } from "./commands/upgrade.js";
 import { registerUsage, registerWallet } from "./commands/wallet.js";
+import { setDebug } from "./debug.js";
 import { printError, setOutputFormat } from "./output/render.js";
 import { maybeNotifyUpdate, registerUpdateCheck, scheduleRefresh } from "./update/check.js";
 import { VERSION } from "./version.js";
@@ -30,6 +31,7 @@ function buildProgram(): Command {
     // Global option names must not be re-declared by subcommands (local wins in optsWithGlobals).
     .option("--url <url>", "override the Console API base URL")
     .option("--json", "emit JSON instead of TOON on stdout")
+    .option("--verbose", "log HTTP/WS diagnostics to stderr (secrets redacted)")
     .option("--no-update-check", "skip the daily check for a newer console-axi")
     .showHelpAfterError(false)
     .exitOverride()
@@ -40,8 +42,9 @@ function buildProgram(): Command {
     // Parse-phase errors (unknown command/option) never reach this hook; they
     // stay plain-text on stderr with exit 2.
     .hook("preAction", (_thisCommand, actionCommand) => {
-      const opts = actionCommand.optsWithGlobals() as { json?: boolean };
+      const opts = actionCommand.optsWithGlobals() as { json?: boolean; verbose?: boolean };
       if (opts.json) setOutputFormat("json");
+      if (opts.verbose) setDebug(true);
     });
 
   registerHome(program);

@@ -7,6 +7,7 @@ import { gunzipSync } from "node:zlib";
 import type { Command } from "commander";
 
 import { action } from "../context.js";
+import { debugLog } from "../debug.js";
 import { AxiError } from "../errors.js";
 import { printResult } from "../output/render.js";
 import { isNewer, isPackagedBinary } from "../update/check.js";
@@ -45,6 +46,7 @@ async function fetchLatest(): Promise<Release> {
   } catch {
     throw new AxiError({ code: "network", message: "Could not reach GitHub to check for updates." });
   }
+  debugLog("http", `GET releases/latest -> ${res.status}`);
   if (!res.ok) {
     throw new AxiError({ code: "network", message: `GitHub releases request failed (HTTP ${res.status}).` });
   }
@@ -107,6 +109,7 @@ async function download(url: string, opts: { progress?: boolean } = {}): Promise
     if (controller.signal.aborted) throw stalled();
     throw new AxiError({ code: "network", message: `Download failed: ${(e as Error).message}` });
   }
+  debugLog("http", `GET ${url} -> ${res.status}`);
   if (!res.ok || !res.body) {
     if (timer) clearTimeout(timer);
     throw new AxiError({ code: "network", message: `Download failed (HTTP ${res.status}).` });
