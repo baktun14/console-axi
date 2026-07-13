@@ -2,6 +2,7 @@ import { Command, CommanderError } from "commander";
 
 import { registerApiKey } from "./commands/apikey.js";
 import { registerAuth } from "./commands/auth.js";
+import { registerConfig } from "./commands/config.js";
 import { registerDeploy } from "./commands/deploy.js";
 import { registerDeployment } from "./commands/deployment.js";
 import { registerHome } from "./commands/home.js";
@@ -14,7 +15,8 @@ import { registerShell } from "./commands/shell.js";
 import { registerUninstall } from "./commands/uninstall.js";
 import { registerUpgrade } from "./commands/upgrade.js";
 import { registerUsage, registerWallet } from "./commands/wallet.js";
-import { printError } from "./output/render.js";
+import { setDebug } from "./debug.js";
+import { printError, setOutputFormat } from "./output/render.js";
 import { maybeNotifyUpdate, registerUpdateCheck, scheduleRefresh } from "./update/check.js";
 import { VERSION } from "./version.js";
 
@@ -27,17 +29,28 @@ function buildProgram(): Command {
     .name("console-axi")
     .description("AXI CLI for the Akash Console managed-wallet API (token-efficient TOON output for agents)")
     .version(VERSION, "-v, --version")
+    // Global option names must not be re-declared by subcommands (local wins in optsWithGlobals).
     .option("--url <url>", "override the Console API base URL")
+    .option("--json", "emit JSON instead of TOON on stdout")
+    .option("--verbose", "log HTTP/WS diagnostics to stderr (secrets redacted)")
     .option("--no-update-check", "skip the daily check for a newer console-axi")
     .showHelpAfterError(false)
     .exitOverride()
     .configureOutput({
       // Route commander's own errors (e.g. unknown command) through our exit codes.
       outputError: (str) => process.stderr.write(str)
+    })
+    // Parse-phase errors (unknown command/option) never reach this hook; they
+    // stay plain-text on stderr with exit 2.
+    .hook("preAction", (_thisCommand, actionCommand) => {
+      const opts = actionCommand.optsWithGlobals() as { json?: boolean; verbose?: boolean };
+      if (opts.json) setOutputFormat("json");
+      if (opts.verbose) setDebug(true);
     });
 
   registerHome(program);
   registerAuth(program);
+  registerConfig(program);
   registerSetup(program);
   registerSdl(program);
   registerDeploy(program);

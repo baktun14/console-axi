@@ -1,6 +1,7 @@
 import createClient, { type Client } from "openapi-fetch";
 
 import type { ResolvedConfig } from "../config/config.js";
+import { debugLog, isDebugFull } from "../debug.js";
 import { AxiError, translateApiError } from "../errors.js";
 import type { paths } from "./schema.js";
 
@@ -23,9 +24,21 @@ export function createApiClient(config: ResolvedConfig): ApiClient {
     // Translate transport-level failures (DNS, connection refused, TLS) into a
     // friendly AxiError instead of a raw "fetch failed" TypeError.
     fetch: async (request) => {
+      const startedAt = Date.now();
+      if (isDebugFull()) {
+        const body = await request.clone().text();
+        if (body) debugLog("http", `> ${truncateBody(body)}`);
+      }
       try {
-        return await fetch(request);
+        const response = await fetch(request);
+        debugLog("http", `${request.method} ${request.url} -> ${response.status} (${Date.now() - startedAt}ms)`);
+        if (isDebugFull()) {
+          const body = await response.clone().text();
+          if (body) debugLog("http", `< ${truncateBody(body)}`);
+        }
+        return response;
       } catch {
+        debugLog("http", `${request.method} ${request.url} -> network error (${Date.now() - startedAt}ms)`);
         throw new AxiError({
           code: "network",
           message: "Could not reach the Console API. Check connectivity and --url."
@@ -33,6 +46,12 @@ export function createApiClient(config: ResolvedConfig): ApiClient {
       }
     }
   });
+}
+
+const MAX_BODY_LOG = 2048;
+
+function truncateBody(body: string): string {
+  return body.length > MAX_BODY_LOG ? `${body.slice(0, MAX_BODY_LOG)}… (${body.length} bytes)` : body;
 }
 
 /**

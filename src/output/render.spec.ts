@@ -2,10 +2,14 @@ import { decode } from "@toon-format/toon";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AxiError, EXIT } from "../errors.js";
-import { printError, printResult } from "./render.js";
+import { printError, printResult, resetOutputFormat, setOutputFormat } from "./render.js";
 
 describe("render", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resetOutputFormat();
+  });
 
   describe("printResult", () => {
     it("emits the result as TOON on stdout", () => {
@@ -60,6 +64,62 @@ describe("render", () => {
 
       expect(exit).toBe(EXIT.ERROR);
       expect(decode(output())).toMatchObject({ error: { code: "internal", message: "kaboom" } });
+    });
+  });
+
+  describe("output format", () => {
+    it("emits JSON when setOutputFormat('json') is active", () => {
+      const { output } = setup();
+      setOutputFormat("json");
+
+      printResult({ dseq: "123", state: "active" }, { help: ["console-axi deployment list"] });
+
+      expect(JSON.parse(output())).toEqual({
+        dseq: "123",
+        state: "active",
+        help: ["console-axi deployment list"]
+      });
+    });
+
+    it("keeps the error payload shape and exit code under JSON", () => {
+      const { output } = setup();
+      setOutputFormat("json");
+
+      const exit = printError(new AxiError({ code: "not_found", message: "missing", details: { dseq: "9" } }));
+
+      expect(exit).toBe(EXIT.ERROR);
+      expect(JSON.parse(output())).toEqual({
+        error: { code: "not_found", exit: 1, message: "missing", details: { dseq: "9" } }
+      });
+    });
+
+    it("honors CONSOLE_AXI_OUTPUT=json from the environment", () => {
+      const { output } = setup();
+      vi.stubEnv("CONSOLE_AXI_OUTPUT", "json");
+
+      printResult({ ok: true });
+
+      expect(JSON.parse(output())).toEqual({ ok: true });
+    });
+
+    it("lets the flag override the environment", () => {
+      const { output } = setup();
+      vi.stubEnv("CONSOLE_AXI_OUTPUT", "toon");
+      setOutputFormat("json");
+
+      printResult({ ok: true });
+
+      expect(JSON.parse(output())).toEqual({ ok: true });
+    });
+
+    it("falls back to TOON for unrecognized env values", () => {
+      const { output } = setup();
+      vi.stubEnv("CONSOLE_AXI_OUTPUT", "yaml");
+
+      printResult({ ok: true });
+
+      expect(() => JSON.parse(output())).toThrow();
+      expect(decode(output())).toMatchObject({ ok: true });
     });
   });
 
