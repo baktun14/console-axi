@@ -2,6 +2,7 @@ import { Command, CommanderError } from "commander";
 
 import { registerApiKey } from "./commands/apikey.js";
 import { registerAuth } from "./commands/auth.js";
+import { registerConfig } from "./commands/config.js";
 import { registerDeploy } from "./commands/deploy.js";
 import { registerDeployment } from "./commands/deployment.js";
 import { registerHome } from "./commands/home.js";
@@ -49,6 +50,7 @@ function buildProgram(): Command {
 
   registerHome(program);
   registerAuth(program);
+  registerConfig(program);
   registerSetup(program);
   registerSdl(program);
   registerDeploy(program);
