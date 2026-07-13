@@ -9,6 +9,7 @@ import { registerGpu } from "./commands/gpu.js";
 import { registerHome } from "./commands/home.js";
 import { registerJwt } from "./commands/jwt.js";
 import { registerBid, registerLease } from "./commands/market.js";
+import { registerProvider } from "./commands/provider.js";
 import { registerSdl } from "./commands/sdl.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerShell } from "./commands/shell.js";
@@ -47,6 +48,7 @@ function buildProgram(): Command {
   registerLease(program);
   registerWallet(program);
   registerUsage(program);
+  registerProvider(program);
   registerGpu(program);
   registerDebug(program);
   registerShell(program);
