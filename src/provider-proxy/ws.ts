@@ -2,6 +2,8 @@ import { Buffer } from "node:buffer";
 
 import WebSocket from "ws";
 
+import { debugLog } from "../debug.js";
+
 /** A message relayed back from the provider (already JSON-parsed). */
 export interface RelayMessage {
   closed?: boolean;
@@ -62,6 +64,8 @@ export class ProviderProxyRelay {
   private async connect(): Promise<void> {
     this.token = await this.opts.ensureToken(this.rotations > 0);
     const wsUrl = this.opts.proxyUrl.replace(/^http/, "ws");
+    // Never log the envelope itself: it carries the JWT in auth.token.
+    debugLog("ws", `connect ${wsUrl} -> ${this.opts.providerUrl} (rotation ${this.rotations})`);
     const factory = this.opts.socketFactory ?? defaultSocketFactory;
     const ws = factory(wsUrl);
     this.ws = ws;
@@ -103,6 +107,7 @@ export class ProviderProxyRelay {
       return;
     }
     if (msg.error === "tokenExpired") {
+      debugLog("ws", "token expired; rotating");
       await this.rotate();
       return;
     }
@@ -126,6 +131,7 @@ export class ProviderProxyRelay {
 
   private onClose(): void {
     if (this.closed) return;
+    debugLog("ws", "closed");
     this.push({ closed: true });
     this.end();
   }

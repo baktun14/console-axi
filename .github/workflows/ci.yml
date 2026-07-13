@@ -40,3 +40,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: E2E test
+        run: npx vitest run --project e2e

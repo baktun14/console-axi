@@ -13,6 +13,7 @@ import { basename, dirname, join } from "node:path";
 import type { Command } from "commander";
 
 import { configDir } from "../config/config.js";
+import { debugLog } from "../debug.js";
 import { REPO_SLUG } from "../version.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -111,6 +112,7 @@ export async function runUpdateCheck(): Promise<void> {
     const res = await fetch(RELEASES_LATEST, {
       headers: { "user-agent": "console-axi", accept: "application/vnd.github+json" }
     });
+    debugLog("http", `GET ${RELEASES_LATEST} -> ${res.status}`);
     if (res.ok) {
       const body = (await res.json()) as { tag_name?: string };
       const tag = (body.tag_name ?? "").replace(/^v/, "");
