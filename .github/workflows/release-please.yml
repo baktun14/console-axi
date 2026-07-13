@@ -56,6 +56,17 @@ jobs:
       - name: Build standalone binaries
         run: npm run build:bin
 
+      # Gate the release on the exact binary we are about to ship: the e2e
+      # suite re-runs against the compiled linux-x64 artifact, catching any
+      # Bun-runtime divergence before assets attach.
+      - name: E2E test the shipped binary
+        env:
+          E2E_CLI: dist-bin/console-axi-linux-x64
+        run: |
+          npm run build
+          chmod +x dist-bin/console-axi-linux-x64
+          npx vitest run --project e2e
+
       - name: Attach binaries to the release
         env:
           GH_TOKEN: ${{ github.token }}
