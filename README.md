@@ -113,7 +113,7 @@ console-axi akashml setup --agent opencode --model <id>
 console-axi akashml setup --agent claude --remove [--project]       # undo
 ```
 
-`akashml logout` removes only the AkashML key (Console `logout` is untouched); `uninstall` sweeps AkashML agent configs too. Env overrides: `AKASHML_API_KEY`, `AKASHML_API_URL` (default `https://api.akashml.com`).
+`setup` validates every `--model` id against the live AkashML catalog before writing config; pass `--no-verify` to skip that check. `akashml logout` removes only the AkashML key (Console `logout` is untouched); `uninstall` sweeps AkashML agent configs too. Env overrides: `AKASHML_API_KEY`, `AKASHML_API_URL` (default `https://api.akashml.com`).
 
 ## Configuration
 

@@ -191,7 +191,9 @@ console-axi akashml setup --agent claude --remove                  # undo
 ```
 
 `--agent claude` also accepts `--sonnet --opus --haiku <id>` tier overrides
-(each defaults to `--model`). codex and opencode reference the key by env var
+(each defaults to `--model`). `setup` validates every `--model` id against
+the live AkashML catalog before writing config; pass `--no-verify` to skip
+that check. codex and opencode reference the key by env var
 reference only — it is never written into their config files, so export
 `AKASHML_API_KEY` in your shell profile first. `akashml logout` removes only
 the AkashML key (Console `logout` is untouched); `uninstall` sweeps AkashML
