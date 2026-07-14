@@ -61,7 +61,7 @@ Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <
 | Debug | `logs <dseq> [--follow]`, `events <dseq> [--follow]`, `exec <dseq> --service <s> -- <cmd>`, `shell <dseq> --service <s>` |
 | Wallet | `wallet list\|balance\|settings\|cost`, `usage` |
 | Keys/tokens | `apikey list\|create\|delete`, `jwt create` |
-| Lifecycle | `upgrade`, `uninstall` |
+| Lifecycle | `upgrade`, `uninstall`, `completion <shell>` |
 
 Run `console-axi` with no arguments for a live status home view, or `console-axi <command> --help` for details.
 
@@ -82,7 +82,7 @@ console-axi setup                 # installs the session hook + Claude skill
 console-axi uninstall             # removes them (and the binary; --no-self to keep it)
 ```
 
-`setup` installs a SessionStart hook that injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session, and installs the [Agent Skill](./skills/console-axi/SKILL.md) into `~/.claude/skills/`. `install.sh` runs `setup` for you. Both honor `CLAUDE_CONFIG_DIR`. For other agents, `setup --agent codex|opencode` prints the hook command to add to that agent's config instead.
+`setup` installs a SessionStart hook that injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session, and installs the [Agent Skill](./skills/console-axi/SKILL.md) into `~/.claude/skills/`. `install.sh` runs `setup` for you. Both honor `CLAUDE_CONFIG_DIR`. For other agents, `setup --agent codex|opencode` installs the same skill plus a managed block in that agent's global `AGENTS.md` — the session-start equivalent, since neither Codex nor opencode has an exec hook. `uninstall` sweeps all three agents symmetrically (absent = no-op, user content preserved).
 
 ## Configuration
 

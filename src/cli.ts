@@ -2,6 +2,7 @@ import { Command, CommanderError } from "commander";
 
 import { registerApiKey } from "./commands/apikey.js";
 import { registerAuth } from "./commands/auth.js";
+import { registerCompletion } from "./commands/completion.js";
 import { registerConfig } from "./commands/config.js";
 import { registerDebug } from "./commands/debug.js";
 import { registerDeploy } from "./commands/deploy.js";
@@ -71,6 +72,7 @@ function buildProgram(): Command {
   registerJwt(program);
   registerUpgrade(program);
   registerUninstall(program);
+  registerCompletion(program);
   registerUpdateCheck(program);
 
   return program;
