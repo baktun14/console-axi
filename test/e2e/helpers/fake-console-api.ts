@@ -12,6 +12,10 @@ export interface RecordedRequest {
 export interface Reply {
   status?: number;
   body?: unknown;
+  /** Raw response body (e.g. an SSE stream). Takes precedence over `body` when set. */
+  raw?: string;
+  /** Extra/overriding response headers (merged over the default content-type). */
+  headers?: Record<string, string>;
 }
 
 export type Responder = Reply | ((req: RecordedRequest) => Reply);
@@ -80,7 +84,8 @@ export class FakeConsoleApi {
           ? responder(recorded)
           : responder;
 
-    res.writeHead(reply.status ?? 200, { "content-type": "application/json" });
-    res.end(JSON.stringify(reply.body ?? {}));
+    const defaultContentType = reply.raw !== undefined ? "text/event-stream" : "application/json";
+    res.writeHead(reply.status ?? 200, { "content-type": defaultContentType, ...reply.headers });
+    res.end(reply.raw !== undefined ? reply.raw : JSON.stringify(reply.body ?? {}));
   }
 }
