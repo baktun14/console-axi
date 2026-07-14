@@ -115,6 +115,21 @@ describe("claude akashml env installer", () => {
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(foreign);
   });
 
+  it("removes a custom-url install (ANTHROPIC_BASE_URL lacks 'akashml') via the akml- token marker", () => {
+    install({ baseUrl: "https://my-gateway.example" });
+    const installedSettings = JSON.parse(readFileSync(join(claudeDir(), "settings.json"), "utf8")) as {
+      env: Record<string, string>;
+    };
+    expect(installedSettings.env.ANTHROPIC_BASE_URL).toBe("https://my-gateway.example/anthropic");
+
+    const result = removeClaudeAkashmlEnv();
+
+    expect(result.status).toBe("removed");
+    const settings = JSON.parse(readFileSync(result.path, "utf8")) as { env?: Record<string, string> };
+    expect(settings.env?.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(settings.env?.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+  });
+
   it("--project scope writes ./.claude/settings.local.json and never settings.json", () => {
     const result = install({ project: true });
     expect(result.path).toBe(join(cwd, ".claude", "settings.local.json"));

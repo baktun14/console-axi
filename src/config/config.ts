@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -75,12 +75,6 @@ export function writeStoredConfig(config: StoredConfig): void {
   writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
   // The file holds the API key; keep it readable only by the owner.
   chmodSync(path, 0o600);
-}
-
-/** Wipe the entire config file, Console and akashml* fields alike. Reserved for `uninstall --purge`. */
-export function clearStoredConfig(): void {
-  const path = configPath();
-  if (existsSync(path)) rmSync(path);
 }
 
 /**

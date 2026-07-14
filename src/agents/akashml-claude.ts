@@ -85,8 +85,14 @@ export function removeClaudeAkashmlEnv(opts: RemoveClaudeAkashmlOptions = {}): {
 
   const settings = readSettings(path);
   const env = settings.env;
-  // Guard: never touch another provider's ANTHROPIC_BASE_URL.
-  if (!env || typeof env.ANTHROPIC_BASE_URL !== "string" || !env.ANTHROPIC_BASE_URL.includes("akashml")) {
+  // Guard: never touch another provider's env block. Recognize this block as
+  // AkashML-owned either by the default base URL (contains "akashml") or by an
+  // akml-prefixed token — a custom --url at setup time means the base URL alone
+  // can't be trusted to identify it, and without this the token would be a
+  // stranded credential that --remove/uninstall can never clean up.
+  const isAkashmlBaseUrl = typeof env?.ANTHROPIC_BASE_URL === "string" && env.ANTHROPIC_BASE_URL.includes("akashml");
+  const isAkashmlToken = typeof env?.ANTHROPIC_AUTH_TOKEN === "string" && env.ANTHROPIC_AUTH_TOKEN.startsWith("akml-");
+  if (!env || (!isAkashmlBaseUrl && !isAkashmlToken)) {
     return { path, status: "absent" };
   }
 

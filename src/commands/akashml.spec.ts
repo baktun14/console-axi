@@ -485,6 +485,70 @@ describe("akashml command", () => {
       expect(req.max_tokens).toBe(128);
       expect(req.temperature).toBe(0.5);
     });
+
+    it("rejects a non-numeric --max-tokens with a usage error instead of sending NaN", async () => {
+      const { line } = setup();
+
+      await run("akashml", "chat", "--model", "Org/Model", "--max-tokens", "abc", "hi");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+      expect(chatStreamMock).not.toHaveBeenCalled();
+      expect(chatMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-integer --max-tokens", async () => {
+      const { line } = setup();
+
+      await run("akashml", "chat", "--model", "Org/Model", "--max-tokens", "12.5", "hi");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+    });
+
+    it("rejects a non-numeric --temperature with a usage error", async () => {
+      const { line } = setup();
+
+      await run("akashml", "chat", "--model", "Org/Model", "--temperature", "warm", "hi");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+      expect(chatStreamMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-numeric --reasoning-max-tokens with a usage error", async () => {
+      const { line } = setup();
+
+      await run("akashml", "chat", "--model", "Org/Model", "--reasoning-max-tokens", "lots", "hi");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+      expect(chatStreamMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects an --effort value outside minimal|low|medium|high|xhigh", async () => {
+      const { line } = setup();
+
+      await run("akashml", "chat", "--model", "Org/Model", "--effort", "extreme", "hi");
+
+      expect(process.exitCode).toBe(2);
+      const body = decode(line(0)) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("usage");
+      expect(body.error.message).toContain("--effort");
+      expect(chatStreamMock).not.toHaveBeenCalled();
+    });
+
+    it("accepts each valid --effort level", async () => {
+      for (const level of ["minimal", "low", "medium", "high", "xhigh"]) {
+        chatStreamMock.mockReset();
+        chatStreamMock.mockResolvedValue({});
+        setup();
+
+        await run("akashml", "chat", "--model", "Org/Model", "--effort", level, "hi");
+
+        expect(lastStreamRequest().reasoning).toMatchObject({ effort: level });
+      }
+    });
   });
 
   describe("setup", () => {

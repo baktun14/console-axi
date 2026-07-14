@@ -174,15 +174,17 @@ export function registerAkashml(program: Command): void {
         messages.push({ role: "user", content });
 
         const req: AkashmlChatRequest = { model: normalizeModelId(opts.model), messages };
-        if (opts.maxTokens !== undefined) req.max_tokens = Number(opts.maxTokens);
-        if (opts.temperature !== undefined) req.temperature = Number(opts.temperature);
+        if (opts.maxTokens !== undefined) req.max_tokens = parseIntFlag(opts.maxTokens, "--max-tokens");
+        if (opts.temperature !== undefined) req.temperature = parseFloatFlag(opts.temperature, "--temperature");
 
         const wantsReasoning =
           opts.effort !== undefined || opts.reasoningMaxTokens !== undefined || opts.showReasoning === true;
         if (wantsReasoning) {
           const reasoning: AkashmlReasoningConfig = {};
-          if (opts.effort !== undefined) reasoning.effort = opts.effort;
-          if (opts.reasoningMaxTokens !== undefined) reasoning.max_tokens = Number(opts.reasoningMaxTokens);
+          if (opts.effort !== undefined) reasoning.effort = assertEffort(opts.effort);
+          if (opts.reasoningMaxTokens !== undefined) {
+            reasoning.max_tokens = parseIntFlag(opts.reasoningMaxTokens, "--reasoning-max-tokens");
+          }
           if (!opts.showReasoning) reasoning.exclude = true;
           req.reasoning = reasoning;
         }
@@ -300,6 +302,37 @@ export function registerAkashml(program: Command): void {
 /** Accept both `Org/Model` and `Org--Model` id forms; normalize to slashed. */
 function normalizeModelId(id: string): string {
   return id.includes("/") ? id : id.replace("--", "/");
+}
+
+const REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high", "xhigh"] as const;
+
+/** Validate --effort against the accepted reasoning-effort levels. */
+function assertEffort(effort: string): string {
+  if (!(REASONING_EFFORT_LEVELS as readonly string[]).includes(effort)) {
+    throw new AxiError({
+      code: "usage",
+      message: `--effort must be one of ${REASONING_EFFORT_LEVELS.join("|")}, got "${effort}".`
+    });
+  }
+  return effort;
+}
+
+/** Parse a non-negative integer flag (e.g. token counts); reject non-numeric input. */
+function parseIntFlag(value: string, flag: string): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new AxiError({ code: "usage", message: `${flag} must be a non-negative integer, got "${value}".` });
+  }
+  return n;
+}
+
+/** Parse a finite numeric flag (e.g. temperature); reject non-numeric input. */
+function parseFloatFlag(value: string, flag: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new AxiError({ code: "usage", message: `${flag} must be a number, got "${value}".` });
+  }
+  return n;
 }
 
 function filterModels(models: AkashmlModel[], filters: ModelsOptions): AkashmlModel[] {

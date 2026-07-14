@@ -66,4 +66,22 @@ describe("parseSseStream", () => {
 
     expect(events).toEqual([]);
   });
+
+  it("parses a fully CRLF-framed stream (multiple events + [DONE])", async () => {
+    const body = streamFromChunks([
+      'data: {"a": 1}\r\n\r\ndata: {"a": 2}\r\n\r\ndata: [DONE]\r\n\r\n'
+    ]);
+
+    const events = await collect(body);
+
+    expect(events).toEqual([{ a: 1 }, { a: 2 }]);
+  });
+
+  it("parses a CRLF event boundary split across chunks", async () => {
+    const body = streamFromChunks(['data: {"a": 1}\r\n', '\r\ndata: {"a": 2}\r\n\r\n']);
+
+    const events = await collect(body);
+
+    expect(events).toEqual([{ a: 1 }, { a: 2 }]);
+  });
 });
