@@ -64,12 +64,21 @@ export function buildRequirements(sdl: SdlDoc): ScreenRequirements {
   return req;
 }
 
+// The bid-screening API validates `timezone` against a narrow allowlist that
+// rejects UTC/GMT/Etc-style zones (HTTP 400 "Timezone is not supported"). Intl
+// resolves to "UTC" in most CI/container/server environments, so map any
+// unsupported zone to a verified-accepted equivalent (Europe/London, ~UTC).
+const UNSUPPORTED_TZ = /^(UTC|GMT|Etc\/.*)$/i;
+const FALLBACK_TZ = "Europe/London";
+
 export function systemTimezone(): string {
+  let zone = "";
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
-    return "UTC";
+    zone = "";
   }
+  return zone && !UNSUPPORTED_TZ.test(zone) ? zone : FALLBACK_TZ;
 }
 
 /** Summarize a provider's rolling 7-day incident window into a single downtime figure + open flag. */

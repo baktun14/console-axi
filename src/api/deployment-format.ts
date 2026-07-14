@@ -70,6 +70,58 @@ export function isDeploymentReady(leases: RawLease[]): boolean {
   return services.every((s) => s.ready_replicas > 0);
 }
 
+/** The deployment-detail fields statusSnapshot consumes (subset of GET /v1/deployments/{dseq}). */
+export interface DeploymentDetailLike {
+  deployment: { id: { owner: string; dseq: string }; state: string; created_at: string };
+  leases?: RawLease[];
+}
+
+export interface StatusSnapshot {
+  result: Record<string, unknown>;
+  ready: boolean;
+  state: string;
+}
+
+/** Build the `deployment status` body (shared by the one-shot command and --watch). */
+export function statusSnapshot(dseq: string, consoleUrl: string, data: DeploymentDetailLike): StatusSnapshot {
+  const leases = data.leases ?? [];
+  const ready = isDeploymentReady(leases);
+
+  const services = leases.flatMap((lease) =>
+    Object.values(lease.status?.services ?? {}).map((svc) => ({
+      service: svc.name,
+      ready: `${svc.ready_replicas}/${svc.replicas}`,
+      uris: formatServiceUris(svc.uris)
+    }))
+  );
+
+  const ports = leases.flatMap((lease) =>
+    Object.entries(lease.status?.forwarded_ports ?? {}).flatMap(([service, list]) =>
+      list.map((p) => ({ service, port: p.port, externalPort: p.externalPort, host: p.host ?? "-" }))
+    )
+  );
+
+  const result: Record<string, unknown> = {
+    dseq,
+    console: consoleUrl,
+    state: data.deployment.state,
+    ready,
+    services: services.length > 0 ? services : "0 services reporting yet"
+  };
+  if (ports.length > 0) result.forwardedPorts = ports;
+
+  return { result, ready, state: data.deployment.state };
+}
+
+export type WatchOutcome = "ready" | "closed" | "pending";
+
+/** Terminal conditions for `deployment status --watch`. */
+export function watchOutcome(state: string, ready: boolean): WatchOutcome {
+  if (ready) return "ready";
+  if (state === "closed") return "closed";
+  return "pending";
+}
+
 export { formatUsd, uactToUsd };
 
 function serviceUris(uris: string[] | null | undefined): string[] {

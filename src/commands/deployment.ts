@@ -2,13 +2,13 @@ import type { Command } from "commander";
 
 import { unwrap } from "../api/client.js";
 import {
-  formatServiceUris,
   formatUsd,
-  isDeploymentReady,
   type RawDeploymentEntry,
   type RawLease,
+  statusSnapshot,
   summarizeDeployment,
-  uactToUsd
+  uactToUsd,
+  watchOutcome
 } from "../api/deployment-format.js";
 import { action, authedContext } from "../context.js";
 import { saveManifest } from "../deploy/manifest-store.js";
@@ -17,7 +17,9 @@ import { readFileOrStdin } from "../input.js";
 import { consoleDeploymentUrl } from "../output/console-url.js";
 import { blockPriceToUsdPerMonth, MIN_DEPOSIT_USD } from "../output/price.js";
 import { printResult } from "../output/render.js";
+import { humanDuration } from "../output/units.js";
 import { assertSdlValid } from "../sdl/validate.js";
+import { sleep } from "../util/poll.js";
 
 function parseUsd(value: string, flag: string, min = 0): number {
   const n = Number(value);
@@ -28,6 +30,28 @@ function parseUsd(value: string, flag: string, min = 0): number {
     throw new AxiError({ code: "usage", message: `${flag} must be at least ${formatUsd(min)} (minimum deposit), got ${formatUsd(n)}.` });
   }
   return n;
+}
+
+function parseBool(value: string, flag: string): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new AxiError({ code: "usage", message: `${flag} must be true or false, got "${value}".` });
+}
+
+interface DeploymentSettings {
+  dseq: string;
+  autoTopUpEnabled: boolean;
+  estimatedTopUpAmount: number;
+  topUpFrequencyMs: number;
+}
+
+function settingsBody(data: DeploymentSettings): Record<string, unknown> {
+  return {
+    dseq: data.dseq,
+    autoTopUpEnabled: data.autoTopUpEnabled,
+    estimatedTopUp: formatUsd(uactToUsd(data.estimatedTopUpAmount)),
+    topUpFrequency: humanDuration(data.topUpFrequencyMs)
+  };
 }
 
 interface Coin {
@@ -116,43 +140,80 @@ export function registerDeployment(program: Command): void {
   deployment
     .command("status <dseq>")
     .description("Live readiness, service URIs and forwarded ports")
+    .option("--watch", "poll until the deployment is ready, closed, or the timeout passes")
+    .option("--interval <seconds>", "poll interval with --watch", "5")
+    .option("--timeout <seconds>", "max seconds to watch (0 = no deadline)", "600")
     .action(
-      action(async (dseq: string, _opts: unknown, command: Command) => {
+      action(async (dseq: string, opts: { watch?: boolean; interval: string; timeout: string }, command: Command) => {
         const { client, config } = authedContext(command);
-        const data = unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), {
-          dseq
-        }).data;
-        const leases = (data.leases ?? []) as RawLease[];
-        const ready = isDeploymentReady(leases);
+        const consoleUrl = consoleDeploymentUrl(config.consoleWebUrl, dseq);
+        const fetchSnapshot = async () =>
+          statusSnapshot(
+            dseq,
+            consoleUrl,
+            unwrap(await client.GET("/v1/deployments/{dseq}", { params: { path: { dseq } } }), { dseq }).data
+          );
 
-        const services = leases.flatMap((lease) =>
-          Object.values(lease.status?.services ?? {}).map((svc) => ({
-            service: svc.name,
-            ready: `${svc.ready_replicas}/${svc.replicas}`,
-            uris: formatServiceUris(svc.uris)
-          }))
-        );
+        if (!opts.watch) {
+          const { result, ready } = await fetchSnapshot();
+          printResult(result, {
+            help: ready
+              ? [`console-axi logs ${dseq} --tail 100`]
+              : [`console-axi deployment status ${dseq}`, `console-axi events ${dseq}`]
+          });
+          return;
+        }
 
-        const ports = leases.flatMap((lease) =>
-          Object.entries(lease.status?.forwarded_ports ?? {}).flatMap(([service, list]) =>
-            list.map((p) => ({ service, port: p.port, externalPort: p.externalPort, host: p.host ?? "-" }))
-          )
-        );
+        const intervalMs = Number(opts.interval) * 1000;
+        const deadlineMs = Number(opts.timeout) * 1000;
+        if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+          throw new AxiError({ code: "usage", message: `--interval must be a positive number of seconds, got "${opts.interval}".` });
+        }
 
-        const result: Record<string, unknown> = {
-          dseq,
-          console: consoleDeploymentUrl(config.consoleWebUrl, dseq),
-          state: data.deployment.state,
-          ready,
-          services: services.length > 0 ? services : "0 services reporting yet"
-        };
-        if (ports.length > 0) result.forwardedPorts = ports;
+        // Each poll prints a complete snapshot (agents re-parse the last block);
+        // help[] only on the terminal one. SIGINT ends the watch cleanly.
+        let interrupted = false;
+        process.once("SIGINT", () => (interrupted = true));
+        const startedAt = Date.now();
+        let polls = 0;
 
-        printResult(result, {
-          help: ready
-            ? [`console-axi logs ${dseq} --tail 100`]
-            : [`console-axi deployment status ${dseq}`, `console-axi events ${dseq}`]
-        });
+        for (;;) {
+          const { result, ready, state } = await fetchSnapshot();
+          polls++;
+          const outcome = watchOutcome(state, ready);
+          const elapsed = Math.round((Date.now() - startedAt) / 1000);
+          const deadlineExceeded = deadlineMs > 0 && Date.now() - startedAt >= deadlineMs;
+
+          if (outcome === "ready" || interrupted) {
+            printResult(
+              { ...result, at: new Date().toISOString(), watch: { polls, elapsed: `${elapsed}s`, outcome: interrupted ? "interrupted" : outcome } },
+              { help: [`console-axi logs ${dseq} --tail 100`] }
+            );
+            return;
+          }
+          if (outcome === "closed") {
+            printResult({ ...result, at: new Date().toISOString(), watch: { polls, elapsed: `${elapsed}s`, outcome } });
+            throw new AxiError({
+              code: "api_error",
+              message: `Deployment ${dseq} closed while watching; it can never become ready.`,
+              details: { dseq }
+            });
+          }
+          if (deadlineExceeded) {
+            printResult({ ...result, at: new Date().toISOString(), watch: { polls, elapsed: `${elapsed}s`, outcome: "timeout" } });
+            throw new AxiError({
+              code: "timeout",
+              message: `Deployment ${dseq} did not become ready within ${opts.timeout}s.`,
+              details: { dseq },
+              help: [`console-axi logs ${dseq} --tail 100`, `console-axi events ${dseq}`]
+            });
+          }
+
+          printResult({ ...result, at: new Date().toISOString() });
+          process.stdout.write("\n");
+          await sleep(intervalMs);
+          if (interrupted) continue; // print one final snapshot, then exit above
+        }
       })
     );
 
@@ -223,6 +284,52 @@ export function registerDeployment(program: Command): void {
         }
         unwrap(res, { dseq });
         printResult({ ok: true, dseq, console: consoleUrl, state: "closed" });
+      })
+    );
+
+  deployment
+    .command("settings <dseq>")
+    .description("View or set per-deployment auto-top-up (escrow refills)")
+    .option("--auto-top-up <true|false>", "enable automatic escrow top-ups for this deployment")
+    .action(
+      action(async (dseq: string, opts: { autoTopUp?: string }, command: Command) => {
+        const { client } = authedContext(command);
+
+        if (opts.autoTopUp === undefined) {
+          const res = await client.GET("/v2/deployment-settings/{dseq}", { params: { path: { dseq } } });
+          if (res.response.status === 404) {
+            printResult(
+              { dseq, autoTopUpEnabled: false, note: "no settings record yet (defaults shown)" },
+              { help: [`console-axi deployment settings ${dseq} --auto-top-up true`] }
+            );
+            return;
+          }
+          printResult(settingsBody(unwrap(res, { dseq }).data), {
+            help: [`console-axi deployment settings ${dseq} --auto-top-up <true|false>`]
+          });
+          return;
+        }
+
+        const autoTopUpEnabled = parseBool(opts.autoTopUp, "--auto-top-up");
+        const patched = await client.PATCH("/v2/deployment-settings/{dseq}", {
+          params: { path: { dseq } },
+          body: { data: { autoTopUpEnabled } }
+        });
+        // No settings row yet: fall back to creating one.
+        const data =
+          patched.response.status === 404
+            ? unwrap(await client.POST("/v2/deployment-settings", { body: { data: { dseq, autoTopUpEnabled } } })).data
+            : unwrap(patched, { dseq }).data;
+
+        printResult(
+          { ok: true, ...settingsBody(data) },
+          {
+            help: [
+              "console-axi wallet settings --auto-reload true  # the wallet-level funding source",
+              `console-axi deployment view ${dseq}`
+            ]
+          }
+        );
       })
     );
 

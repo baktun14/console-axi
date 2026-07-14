@@ -1,6 +1,6 @@
 ---
 name: console-axi
-description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate/price-check an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
+description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
 ---
 
 # console-axi
@@ -30,8 +30,8 @@ console-axi whoami
 ## Building a valid SDL
 
 Every deployment needs a valid SDL (the YAML describing your app). You act as the
-wizard: interview the user, scaffold an SDL with `sdl init`, then validate and
-price-check it before deploying — never hand-write pricing or a half-formed SDL.
+wizard: interview the user, scaffold an SDL with `sdl init`, then validate it
+before deploying — never hand-write a half-formed SDL.
 
 Ask only what you don't already know, roughly in this order:
 

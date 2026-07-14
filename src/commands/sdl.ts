@@ -7,6 +7,7 @@ import { printResult } from "../output/render.js";
 import { buildRequirements, type ScreenRequirements, screenSupply, summarizeIncidents } from "../sdl/screen.js";
 import { toYaml } from "../sdl/serialize.js";
 import { summarizeSdl } from "../sdl/summary.js";
+import { synthesizeSdl } from "../sdl/synthesize.js";
 import { cpuUnits } from "../sdl/templates/common.js";
 import { getTemplate, listTemplates } from "../sdl/templates/registry.js";
 import type { InitOptions } from "../sdl/templates/types.js";
@@ -24,13 +25,16 @@ export function registerSdl(program: Command): void {
 
 function registerTemplates(sdl: Command): void {
   sdl
-    .command("templates")
-    .description("List the SDL scaffolds `sdl init` can generate")
+    .command("scaffolds")
+    // Back-compat: this was `sdl templates` before the Console catalog took the
+    // `template` word (see the top-level `template` command group).
+    .alias("templates")
+    .description("List the local SDL scaffolds `sdl init` can generate")
     .action(
       action(() => {
         printResult(
-          { templates: listTemplates().map((t) => ({ name: t.name, description: t.description, params: t.params.join(" ") })) },
-          { help: ["console-axi sdl init <template> [flags]"] }
+          { scaffolds: listTemplates().map((t) => ({ name: t.name, description: t.description, params: t.params.join(" ") })) },
+          { help: ["console-axi sdl init <scaffold> [flags]"] }
         );
       })
     );
@@ -38,7 +42,7 @@ function registerTemplates(sdl: Command): void {
 
 function registerInit(sdl: Command): void {
   sdl
-    .command("init <template>")
+    .command("init <scaffold>")
     .description("Generate an SDL from a template; prints YAML to stdout (redirect to a file)")
     .option("--image <ref>", "container image (must be tagged, e.g. nginx:1.27)")
     .option("--port <n>", "container port to expose")
@@ -59,7 +63,7 @@ function registerInit(sdl: Command): void {
           throw new AxiError({
             code: "usage",
             message: `Unknown template "${templateName}".`,
-            help: ["console-axi sdl templates"]
+            help: ["console-axi sdl scaffolds"]
           });
         }
 
@@ -151,7 +155,7 @@ function registerScreen(sdl: Command): void {
 
         const deployHelp = file
           ? `console-axi deploy --sdl ${file} --deposit <usd>`
-          : "console-axi sdl init <template> [flags] > app.yml";
+          : "console-axi sdl init <scaffold> [flags] > app.yml";
         printResult(
           {
             count: `${matched.length} matching`,
@@ -176,18 +180,6 @@ function loadValidSdl(file: string): SdlDoc {
       message: `SDL is invalid: ${errors.map((e) => e.message).join("; ")}`,
       help: [`console-axi sdl validate ${file}`]
     });
-  }
-  return parsed;
-}
-
-/** Build a throwaway SDL from resource flags (via a template) so chain-sdk does the unit math. */
-function synthesizeSdl(o: InitOptions): SdlDoc {
-  const templateName = o.gpu !== undefined || o.gpuModel !== undefined ? "gpu" : "web";
-  const template = getTemplate(templateName);
-  if (!template) throw new AxiError({ code: "internal", message: `Missing "${templateName}" template.` });
-  const { valid, errors, parsed } = validateSdl(toYaml(template.build(o)));
-  if (!valid || !parsed) {
-    throw new AxiError({ code: "internal", message: `Synthesized SDL failed validation: ${errors.map((e) => e.message).join("; ")}` });
   }
   return parsed;
 }

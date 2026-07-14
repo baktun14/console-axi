@@ -1,7 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildRequirements, summarizeIncidents } from "./screen.js";
+import { buildRequirements, summarizeIncidents, systemTimezone } from "./screen.js";
 import type { SdlDoc } from "./types.js";
+
+describe("systemTimezone", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  function mockResolvedZone(zone: string | undefined) {
+    vi.spyOn(Intl, "DateTimeFormat").mockReturnValue({
+      resolvedOptions: () => ({ timeZone: zone })
+    } as unknown as Intl.DateTimeFormat);
+  }
+
+  it("passes a supported city zone through unchanged", () => {
+    mockResolvedZone("America/Chicago");
+    expect(systemTimezone()).toBe("America/Chicago");
+  });
+
+  // The bid-screening API rejects these with HTTP 400 "Timezone is not supported".
+  it.each(["UTC", "Etc/UTC", "GMT", "Etc/GMT", "etc/utc"])("maps unsupported zone %s to the fallback", (zone) => {
+    mockResolvedZone(zone);
+    expect(systemTimezone()).toBe("Europe/London");
+  });
+
+  it("falls back when the resolved zone is empty", () => {
+    mockResolvedZone("");
+    expect(systemTimezone()).toBe("Europe/London");
+  });
+
+  it("falls back when Intl throws", () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(() => {
+      throw new Error("no Intl");
+    });
+    expect(systemTimezone()).toBe("Europe/London");
+  });
+});
 
 describe("buildRequirements", () => {
   it("collects placement attributes and signedBy from the SDL", () => {
