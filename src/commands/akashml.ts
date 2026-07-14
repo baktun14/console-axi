@@ -1,6 +1,14 @@
 import type { Command } from "commander";
 
-import { type AkashmlModel, listModels } from "../akashml/client.js";
+import {
+  type AkashmlChatRequest,
+  type AkashmlMessage,
+  type AkashmlModel,
+  type AkashmlReasoningConfig,
+  chat,
+  chatStream,
+  listModels
+} from "../akashml/client.js";
 import {
   readStoredConfig,
   requireAkashmlAuth,
@@ -9,8 +17,11 @@ import {
   writeStoredConfig
 } from "../config/config.js";
 import { action } from "../context.js";
+import { debugLog } from "../debug.js";
+import { AxiError } from "../errors.js";
+import { readFileOrStdin } from "../input.js";
 import { formatUsd } from "../output/price.js";
-import { printResult } from "../output/render.js";
+import { isJsonOutput, printResult } from "../output/render.js";
 
 /** AkashML API keys are prefixed this way; enforced live by the probe, not client-side. */
 const AKML_PREFIX = "akml-";
@@ -26,6 +37,18 @@ interface ModelsOptions {
   model?: string;
   tools?: boolean;
   reasoning?: boolean;
+}
+
+interface ChatOptions {
+  model?: string;
+  system?: string;
+  maxTokens?: string;
+  temperature?: string;
+  /** Commander's --no-stream flag: defaults true, false when the flag is passed. */
+  stream: boolean;
+  effort?: string;
+  reasoningMaxTokens?: string;
+  showReasoning?: boolean;
 }
 
 /**
@@ -103,6 +126,84 @@ export function registerAkashml(program: Command): void {
         printResult({ models: models.map(modelRow) }, { help: NEXT_STEPS });
       })
     );
+
+  akashml
+    .command("chat [prompt...]")
+    .description("One-shot chat completion against an AkashML model (streams by default)")
+    .option("--model <id>", "AkashML model id (Org/Model or Org--Model form) — required")
+    .option("--system <text>", "optional system message")
+    .option("--max-tokens <n>", "maximum output tokens")
+    .option("--temperature <n>", "sampling temperature")
+    .option("--no-stream", "force a single non-streaming request with structured output")
+    .option("--effort <level>", "reasoning effort: minimal|low|medium|high|xhigh")
+    .option("--reasoning-max-tokens <n>", "reasoning token budget")
+    .option("--show-reasoning", "stream reasoning deltas to stderr")
+    .action(
+      action(async (prompt: string[], opts: ChatOptions) => {
+        if (!opts.model) {
+          throw new AxiError({
+            code: "usage",
+            message: "Missing required option '--model <id>'.",
+            help: ["console-axi akashml models"]
+          });
+        }
+
+        const config = requireAkashmlAuth();
+        const joined = prompt.join(" ");
+        const content = joined === "" || joined === "-" ? readFileOrStdin("-") : joined;
+
+        const messages: AkashmlMessage[] = [];
+        if (opts.system) messages.push({ role: "system", content: opts.system });
+        messages.push({ role: "user", content });
+
+        const req: AkashmlChatRequest = { model: normalizeModelId(opts.model), messages };
+        if (opts.maxTokens !== undefined) req.max_tokens = Number(opts.maxTokens);
+        if (opts.temperature !== undefined) req.temperature = Number(opts.temperature);
+
+        const wantsReasoning =
+          opts.effort !== undefined || opts.reasoningMaxTokens !== undefined || opts.showReasoning === true;
+        if (wantsReasoning) {
+          const reasoning: AkashmlReasoningConfig = {};
+          if (opts.effort !== undefined) reasoning.effort = opts.effort;
+          if (opts.reasoningMaxTokens !== undefined) reasoning.max_tokens = Number(opts.reasoningMaxTokens);
+          if (!opts.showReasoning) reasoning.exclude = true;
+          req.reasoning = reasoning;
+        }
+
+        if (!opts.stream || isJsonOutput()) {
+          const completion = await chat(config, req);
+          const message = completion.choices[0]?.message;
+          const reasoningText = message?.reasoning_content ?? message?.reasoning;
+          const result: Record<string, unknown> = {
+            model: completion.model,
+            content: message?.content ?? ""
+          };
+          if (reasoningText) result.reasoning = reasoningText;
+          result.finishReason = completion.choices[0]?.finish_reason;
+          result.usage = completion.usage;
+          printResult(result);
+          return;
+        }
+
+        const { usage, finishReason } = await chatStream(config, req, (delta) => {
+          if (delta.content) process.stdout.write(delta.content);
+          if (opts.showReasoning) {
+            const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
+            if (reasoningDelta) process.stderr.write(reasoningDelta);
+          }
+        });
+        process.stdout.write("\n");
+        debugLog(
+          "akashml",
+          `usage=${JSON.stringify(usage ?? {})} finishReason=${finishReason ?? "n/a"}`
+        );
+      })
+    );
+}
+
+/** Accept both `Org/Model` and `Org--Model` id forms; normalize to slashed. */
+function normalizeModelId(id: string): string {
+  return id.includes("/") ? id : id.replace("--", "/");
 }
 
 function filterModels(models: AkashmlModel[], filters: ModelsOptions): AkashmlModel[] {
