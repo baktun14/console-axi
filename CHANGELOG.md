@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0](https://github.com/baktun14/console-axi/compare/v1.1.1...v1.2.0) (2026-07-14)
+
+
+### Features
+
+* automated codex/opencode setup + shell completions ([#19](https://github.com/baktun14/console-axi/issues/19)) ([3886b90](https://github.com/baktun14/console-axi/commit/3886b902abd6c98b01d14f6eff6d6223901da7d5))
+* ergonomics core — --json output, --verbose diagnostics, config command ([#16](https://github.com/baktun14/console-axi/issues/16)) ([2e55f4b](https://github.com/baktun14/console-axi/commit/2e55f4b021134c4c2f3bba046d781ac0bcc690fb))
+* marketplace discovery + lifecycle completeness (provider/gpu/template/price/settings/watch) ([#18](https://github.com/baktun14/console-axi/issues/18)) ([95d41c8](https://github.com/baktun14/console-axi/commit/95d41c89b1a24ecbc48bb32f119cff3f9cbb54a0))
+
 ## [1.1.1](https://github.com/baktun14/console-axi/compare/v1.1.0...v1.1.1) (2026-07-07)
 
 
