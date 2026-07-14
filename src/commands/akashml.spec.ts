@@ -487,6 +487,129 @@ describe("akashml command", () => {
     });
   });
 
+  describe("setup", () => {
+    let claudeHome: string;
+    let codexHome: string;
+
+    beforeEach(() => {
+      vi.stubEnv("AKASHML_API_KEY", "akml-secret-key-value");
+      claudeHome = mkdtempSync(join(tmpdir(), "axi-akml-setup-claude-"));
+      codexHome = mkdtempSync(join(tmpdir(), "axi-akml-setup-codex-"));
+      vi.stubEnv("CLAUDE_CONFIG_DIR", join(claudeHome, ".claude"));
+      vi.stubEnv("CODEX_HOME", join(codexHome, ".codex"));
+    });
+
+    afterEach(() => {
+      rmSync(claudeHome, { recursive: true, force: true });
+      rmSync(codexHome, { recursive: true, force: true });
+    });
+
+    it("errors when --agent is missing", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--model", "Org/Model");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+    });
+
+    it("errors when --model is missing (not removing), pointing at akashml models", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "claude");
+
+      expect(process.exitCode).toBe(2);
+      const body = decode(line(0)) as { error: { code: string }; help: string[] };
+      expect(body.error.code).toBe("usage");
+      expect(body.help).toContain("console-axi akashml models");
+    });
+
+    it("rejects claude-only flags for codex", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "codex", "--model", "Org/Model", "--sonnet", "Org/Other");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+    });
+
+    it("rejects --project for codex", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "codex", "--model", "Org/Model", "--project");
+
+      expect(process.exitCode).toBe(2);
+      expect(decode(line(0))).toMatchObject({ error: { code: "usage" } });
+    });
+
+    it("validates --model against live listModels and errors on an unknown id", async () => {
+      listModelsMock.mockResolvedValue([sampleModel({ id: "Org/Known" })]);
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "codex", "--model", "Org/Unknown");
+
+      expect(process.exitCode).toBe(2);
+      const body = decode(line(0)) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("usage");
+      expect(body.error.message).toContain("Org/Unknown");
+    });
+
+    it("skips validation with --no-verify", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "codex", "--model", "Org/Unknown", "--no-verify");
+
+      expect(listModelsMock).not.toHaveBeenCalled();
+      expect(decode(line(0))).toMatchObject({ ok: true, status: "installed" });
+    });
+
+    it("installs codex config and includes a masked export note without the real key", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "codex", "--model", "Org/Model", "--no-verify");
+
+      const body = decode(line(0)) as { note: string };
+      expect(body.note).toContain("export AKASHML_API_KEY=");
+      expect(body.note).not.toContain("akml-secret-key-value");
+    });
+
+    it("installs opencode config and includes a masked export note without the real key", async () => {
+      const opencodeHome = mkdtempSync(join(tmpdir(), "axi-akml-setup-oc-"));
+      vi.stubEnv("XDG_CONFIG_HOME", join(opencodeHome, ".config"));
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "opencode", "--model", "Org/Model", "--no-verify");
+
+      const body = decode(line(0)) as { note: string };
+      expect(body.note).toContain("export AKASHML_API_KEY=");
+      expect(body.note).not.toContain("akml-secret-key-value");
+      rmSync(opencodeHome, { recursive: true, force: true });
+    });
+
+    it("installs claude env and notes the key was written into settings (not masked as an export line)", async () => {
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "claude", "--model", "Org/Model", "--no-verify");
+
+      const body = decode(line(0)) as { note: string; settings: string };
+      expect(body.note).not.toContain("export AKASHML_API_KEY=");
+      expect(body.settings).toContain("settings.json");
+    });
+
+    it("--remove works without any AkashML auth configured", async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv("XDG_CONFIG_HOME", dir);
+      vi.stubEnv("CODEX_HOME", join(codexHome, ".codex"));
+      const { line } = setup();
+
+      await run("akashml", "setup", "--agent", "codex", "--remove");
+
+      expect(process.exitCode ?? 0).toBe(0);
+      const body = decode(line(0)) as { status: string };
+      expect(body.status).toBe("absent");
+    });
+  });
+
   function seed(stored: StoredConfig): void {
     const path = configPath();
     mkdirSync(dirname(path), { recursive: true });

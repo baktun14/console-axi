@@ -39,7 +39,8 @@ function assertKey(key: string): ConfigKey {
   });
 }
 
-function mask(value: string): string {
+/** Mask a secret value for display (e.g. an API key echoed back in a setup note). */
+export function mask(value: string): string {
   return value.length <= 8 ? "****" : `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 

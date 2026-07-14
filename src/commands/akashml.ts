@@ -1,5 +1,8 @@
 import type { Command } from "commander";
 
+import { installClaudeAkashmlEnv, removeClaudeAkashmlEnv } from "../agents/akashml-claude.js";
+import { installCodexAkashml, removeCodexAkashml } from "../agents/akashml-codex.js";
+import { installOpencodeAkashml, removeOpencodeAkashml } from "../agents/akashml-opencode.js";
 import {
   type AkashmlChatRequest,
   type AkashmlMessage,
@@ -22,6 +25,7 @@ import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { formatUsd } from "../output/price.js";
 import { isJsonOutput, printResult } from "../output/render.js";
+import { mask } from "./config.js";
 
 /** AkashML API keys are prefixed this way; enforced live by the probe, not client-side. */
 const AKML_PREFIX = "akml-";
@@ -51,10 +55,23 @@ interface ChatOptions {
   showReasoning?: boolean;
 }
 
+type SetupAgent = "claude" | "codex" | "opencode";
+
+interface SetupOptions {
+  agent: string;
+  model?: string;
+  sonnet?: string;
+  opus?: string;
+  haiku?: string;
+  project?: boolean;
+  remove?: boolean;
+  /** Commander's --no-verify flag: defaults true, false when the flag is passed. */
+  verify: boolean;
+}
+
 /**
- * Top-level `akashml` command group (managed inference on Akash compute).
- * `login`/`logout`/`models` land here now; `chat` and `setup` are registered
- * as sibling subcommands by later tasks.
+ * Top-level `akashml` command group (managed inference on Akash compute):
+ * login/logout/models/chat/setup.
  */
 export function registerAkashml(program: Command): void {
   const akashml = program.command("akashml").description("AkashML managed inference (models, chat, setup)");
@@ -199,6 +216,85 @@ export function registerAkashml(program: Command): void {
         );
       })
     );
+
+  akashml
+    .command("setup")
+    .description("Configure claude, codex, or opencode to use AkashML as the inference backend")
+    .option("--agent <agent>", "claude | codex | opencode")
+    .option("--model <id>", "AkashML model id (Org/Model or Org--Model form)")
+    .option("--sonnet <id>", "override the Sonnet-tier model (claude only, defaults to --model)")
+    .option("--opus <id>", "override the Opus-tier model (claude only, defaults to --model)")
+    .option("--haiku <id>", "override the Haiku-tier model (claude only, defaults to --model)")
+    .option("--project", "write ./.claude/settings.local.json instead of the global settings (claude only)", false)
+    .option("--remove", "remove the AkashML configuration for this agent instead of installing it", false)
+    .option("--no-verify", "skip validating --model id(s) against live AkashML models")
+    .action(
+      action(async (opts: SetupOptions) => {
+        const agent = assertAgent(opts.agent);
+        assertClaudeOnlyFlags(agent, opts);
+
+        if (opts.remove) {
+          const removed = dispatchRemove(agent, { project: opts.project });
+          printResult(
+            { ok: true, agent, ...removed },
+            { help: ["console-axi akashml setup --agent " + agent + " --model <id>", "console-axi uninstall"] }
+          );
+          return;
+        }
+
+        if (!opts.model) {
+          throw new AxiError({
+            code: "usage",
+            message: "Missing required option '--model <id>'.",
+            help: ["console-axi akashml models"]
+          });
+        }
+
+        const config = requireAkashmlAuth();
+        const model = normalizeModelId(opts.model);
+        const sonnet = normalizeModelId(opts.sonnet ?? opts.model);
+        const opus = normalizeModelId(opts.opus ?? opts.model);
+        const haiku = normalizeModelId(opts.haiku ?? opts.model);
+
+        const idsToValidate = agent === "claude" ? [...new Set([model, sonnet, opus, haiku])] : [model];
+        await assertModelsKnown(config, idsToValidate, opts.verify);
+
+        if (agent === "claude") {
+          const installed = installClaudeAkashmlEnv({
+            baseUrl: config.akashmlBaseUrl,
+            apiKey: config.akashmlApiKey,
+            sonnet,
+            opus,
+            haiku,
+            project: opts.project
+          });
+          printResult(
+            {
+              ok: true,
+              agent,
+              settings: installed.path,
+              status: installed.status,
+              note: "AkashML credentials were written into that settings file (ANTHROPIC_AUTH_TOKEN)."
+            },
+            { help: [`console-axi akashml setup --agent claude --remove${opts.project ? " --project" : ""}`] }
+          );
+          return;
+        }
+
+        const install = agent === "codex" ? installCodexAkashml : installOpencodeAkashml;
+        const installed = install({ baseUrl: config.akashmlBaseUrl, model });
+        printResult(
+          {
+            ok: true,
+            agent,
+            path: installed.path,
+            status: installed.status,
+            note: `export AKASHML_API_KEY=${mask(config.akashmlApiKey)}  # set the real key in your shell profile; it is never written to the ${agent} config file`
+          },
+          { help: [`console-axi akashml setup --agent ${agent} --remove`] }
+        );
+      })
+    );
 }
 
 /** Accept both `Org/Model` and `Org--Model` id forms; normalize to slashed. */
@@ -226,4 +322,50 @@ function modelRow(m: AkashmlModel): Record<string, unknown> {
     features: m.supported_features.join(", "),
     quant: m.quantization
   };
+}
+
+function assertAgent(agent: string | undefined): SetupAgent {
+  if (!agent) {
+    throw new AxiError({ code: "usage", message: "Missing required option '--agent <agent>'." });
+  }
+  const lower = agent.toLowerCase();
+  if (lower !== "claude" && lower !== "codex" && lower !== "opencode") {
+    throw new AxiError({ code: "usage", message: `Unknown --agent "${agent}". Use claude, codex, or opencode.` });
+  }
+  return lower;
+}
+
+function assertClaudeOnlyFlags(agent: SetupAgent, opts: SetupOptions): void {
+  const usesClaudeOnlyFlags = opts.sonnet !== undefined || opts.opus !== undefined || opts.haiku !== undefined || opts.project;
+  if (agent !== "claude" && usesClaudeOnlyFlags) {
+    throw new AxiError({
+      code: "usage",
+      message: "--sonnet, --opus, --haiku, and --project are only valid with --agent claude."
+    });
+  }
+}
+
+/** Validate every provided model id against live AkashML models unless --no-verify was passed. */
+async function assertModelsKnown(
+  config: ResolvedConfig & { akashmlApiKey: string },
+  ids: string[],
+  verify: boolean
+): Promise<void> {
+  if (!verify) return;
+  const models = await listModels(config);
+  const known = new Set(models.map((m) => m.id));
+  const unknown = ids.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    throw new AxiError({
+      code: "usage",
+      message: `Unknown AkashML model id(s): ${unknown.join(", ")}`,
+      help: ["console-axi akashml models"]
+    });
+  }
+}
+
+function dispatchRemove(agent: SetupAgent, opts: { project?: boolean }): { path: string; status: string } {
+  if (agent === "claude") return removeClaudeAkashmlEnv({ project: opts.project });
+  if (agent === "codex") return removeCodexAkashml();
+  return removeOpencodeAkashml();
 }
