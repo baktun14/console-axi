@@ -1,6 +1,6 @@
 ---
 name: console-axi
-description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
+description: Deploy and manage Akash Network workloads through the Console managed wallet, and call AkashML managed LLM inference. Use for "deploy to Akash", "write/validate an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", managing bids, leases, wallet balance, and API keys, or "AkashML login", "list AkashML models", "chat with an LLM on Akash", and pointing a coding agent (claude/codex/opencode) at AkashML — all via console-axi.
 ---
 
 # console-axi
@@ -193,8 +193,10 @@ console-axi akashml setup --agent claude --remove                  # undo
 `--agent claude` also accepts `--sonnet --opus --haiku <id>` tier overrides
 (each defaults to `--model`). `setup` validates every `--model` id against
 the live AkashML catalog before writing config; pass `--no-verify` to skip
-that check. codex and opencode reference the key by env var
-reference only — it is never written into their config files, so export
+that check. Claude `setup` writes the literal API key into the settings file
+(`ANTHROPIC_AUTH_TOKEN`); codex and opencode only ever reference
+`AKASHML_API_KEY` from the environment, never a literal key on disk — export
 `AKASHML_API_KEY` in your shell profile first. `akashml logout` removes only
-the AkashML key (Console `logout` is untouched); `uninstall` sweeps AkashML
-agent configs too.
+the AkashML key (Console `logout` is untouched); global `uninstall` sweeps
+AkashML agent configs too, but only global-scope ones — undo a `--project`
+claude setup with `console-axi akashml setup --agent claude --remove --project`.

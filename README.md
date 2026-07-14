@@ -113,7 +113,7 @@ console-axi akashml setup --agent opencode --model <id>
 console-axi akashml setup --agent claude --remove [--project]       # undo
 ```
 
-`setup` validates every `--model` id against the live AkashML catalog before writing config; pass `--no-verify` to skip that check. `akashml logout` removes only the AkashML key (Console `logout` is untouched); `uninstall` sweeps AkashML agent configs too. Env overrides: `AKASHML_API_KEY`, `AKASHML_API_URL` (default `https://api.akashml.com`).
+`setup` validates every `--model` id against the live AkashML catalog before writing config; pass `--no-verify` to skip that check. Claude `setup` writes the literal API key into the settings file (`ANTHROPIC_AUTH_TOKEN`); codex and opencode only ever reference `AKASHML_API_KEY` from the environment, never a literal key on disk. `akashml logout` removes only the AkashML key (Console `logout` is untouched); global `uninstall` sweeps AkashML agent configs too, but only global-scope ones — undo a `--project` claude setup with `console-axi akashml setup --agent claude --remove --project`. Env overrides: `AKASHML_API_KEY`, `AKASHML_API_URL` (default `https://api.akashml.com`).
 
 ## Configuration
 
