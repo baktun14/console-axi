@@ -11,7 +11,8 @@ import { installSkillFile, removeSkillDir } from "./skill-file.js";
  * root ~/.config/opencode (XDG-aware), skills at skill/<name>/SKILL.md (the
  * documented singular path; a plural skills/ mirror exists from cross-agent
  * installers but skill/ is canonical), global instructions at AGENTS.md.
- * opencode.json is deliberately never touched.
+ * opencode.json itself is untouched by this base installer — it's only
+ * merged into by the AkashML installer (./akashml-opencode.ts).
  */
 export function opencodeDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
