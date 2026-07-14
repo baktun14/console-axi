@@ -2,7 +2,7 @@ import type { Command } from "commander";
 
 import { createApiClient } from "../api/client.js";
 import { getCurrentUser } from "../api/user.js";
-import { clearStoredConfig, readStoredConfig, resolveConfig, writeStoredConfig } from "../config/config.js";
+import { clearConsoleConfig, readStoredConfig, resolveConfig, writeStoredConfig } from "../config/config.js";
 import { action, authedContext } from "../context.js";
 import { AxiError } from "../errors.js";
 import { printResult } from "../output/render.js";
@@ -38,11 +38,11 @@ export function registerAuth(program: Command): void {
 
   program
     .command("logout")
-    .description("Remove the stored API key and config")
+    .description("Remove the stored Console API key and config (AkashML credentials are untouched)")
     .action(
       action(() => {
-        clearStoredConfig();
-        printResult({ ok: true, message: "Logged out; stored config removed." });
+        clearConsoleConfig();
+        printResult({ ok: true, message: "Logged out; stored Console config removed." });
       })
     );
 

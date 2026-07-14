@@ -23,6 +23,7 @@ export type ErrorCode =
   | "network"
   | "api_error"
   | "config"
+  | "rate_limited"
   | "internal";
 
 export interface AxiErrorShape {

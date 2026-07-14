@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AxiError } from "../errors.js";
 import {
+  clearConsoleConfig,
   configPath,
+  DEFAULT_AKASHML_BASE_URL,
   DEFAULT_BASE_URL,
   DEFAULT_CONSOLE_WEB_URL,
+  readStoredConfig,
+  requireAkashmlAuth,
   requireAuth,
   resolveConfig,
   type StoredConfig
@@ -103,6 +107,88 @@ describe("config resolution", () => {
     expect(requireAuth().apiKey).toBe("k");
   });
 
+  it("defaults akashmlBaseUrl and leaves akashmlApiKey undefined when nothing is set", () => {
+    setup();
+
+    const config = resolveConfig();
+
+    expect(config.akashmlApiKey).toBeUndefined();
+    expect(config.akashmlBaseUrl).toBe(DEFAULT_AKASHML_BASE_URL);
+  });
+
+  it("reads akashml fields from the stored config file", () => {
+    setup({ stored: { akashmlApiKey: "akml-stored", akashmlBaseUrl: "https://stored-akashml.example" } });
+
+    const config = resolveConfig();
+
+    expect(config.akashmlApiKey).toBe("akml-stored");
+    expect(config.akashmlBaseUrl).toBe("https://stored-akashml.example");
+  });
+
+  it("prefers AKASHML_API_KEY/AKASHML_API_URL env over the stored akashml fields", () => {
+    setup({
+      stored: { akashmlApiKey: "akml-stored", akashmlBaseUrl: "https://stored-akashml.example" },
+      env: { AKASHML_API_KEY: "akml-env", AKASHML_API_URL: "https://env-akashml.example/" }
+    });
+
+    const config = resolveConfig();
+
+    expect(config.akashmlApiKey).toBe("akml-env");
+    expect(config.akashmlBaseUrl).toBe("https://env-akashml.example");
+  });
+
+  it("throws a friendly auth error when requireAkashmlAuth finds no key", () => {
+    setup();
+
+    expect(() => requireAkashmlAuth()).toThrow(AxiError);
+    try {
+      requireAkashmlAuth();
+      expect.fail("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AxiError);
+      const axiError = error as AxiError;
+      expect(axiError.code).toBe("unauthorized");
+      expect(axiError.help).toEqual(["console-axi akashml login --with-key <akml-...>"]);
+    }
+  });
+
+  it("returns the key from requireAkashmlAuth when configured", () => {
+    setup({ env: { AKASHML_API_KEY: "akml-k" } });
+
+    expect(requireAkashmlAuth().akashmlApiKey).toBe("akml-k");
+  });
+
+  describe("clearConsoleConfig", () => {
+    it("removes only Console fields, leaving akashml fields intact", () => {
+      setup({
+        stored: {
+          apiKey: "sk-console",
+          baseUrl: "https://custom-console.example",
+          providerProxyUrl: "https://custom-proxy.example",
+          network: "sandbox",
+          consoleWebUrl: "https://custom-web.example",
+          akashmlApiKey: "akml-keep-me",
+          akashmlBaseUrl: "https://keep-me-akashml.example"
+        }
+      });
+
+      clearConsoleConfig();
+
+      const stored = readStoredConfig();
+      expect(stored).toEqual({
+        akashmlApiKey: "akml-keep-me",
+        akashmlBaseUrl: "https://keep-me-akashml.example"
+      });
+    });
+
+    it("is a no-op when no config file exists", () => {
+      setup();
+
+      expect(() => clearConsoleConfig()).not.toThrow();
+      expect(existsSync(configPath())).toBe(false);
+    });
+  });
+
   function setup(input: { stored?: StoredConfig; env?: Record<string, string> } = {}) {
     const dir = mkdtempSync(join(tmpdir(), "axi-config-"));
     tempDirs.push(dir);
@@ -113,6 +199,8 @@ describe("config resolution", () => {
     vi.stubEnv("CONSOLE_PROVIDER_PROXY_URL", input.env?.CONSOLE_PROVIDER_PROXY_URL);
     vi.stubEnv("CONSOLE_NETWORK", input.env?.CONSOLE_NETWORK);
     vi.stubEnv("CONSOLE_WEB_URL", input.env?.CONSOLE_WEB_URL);
+    vi.stubEnv("AKASHML_API_KEY", input.env?.AKASHML_API_KEY);
+    vi.stubEnv("AKASHML_API_URL", input.env?.AKASHML_API_URL);
 
     if (input.stored) {
       const path = configPath();

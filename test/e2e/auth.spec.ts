@@ -60,11 +60,30 @@ describe("auth flow", () => {
 
     const out = await runCli(["logout"], { env: env() });
     expect(out.code).toBe(0);
-    expect(existsSync(join(home.configDir, "config.json"))).toBe(false);
+    const configFile = join(home.configDir, "config.json");
+    // logout is scoped to Console fields; the file itself may remain (possibly empty
+    // or holding untouched akashml* fields), so assert on content, not existence.
+    expect(JSON.parse(readFileSync(configFile, "utf8"))).not.toHaveProperty("apiKey");
 
     const after = await runCli(["whoami"], { env: env() });
     expect(after.code).toBe(1);
     expect(after.toon()).toMatchObject({ error: { code: "unauthorized" } });
+  });
+
+  it("logout leaves akashmlApiKey/akashmlBaseUrl intact", async () => {
+    api.on("GET", "/v1/user/me", { body: USER });
+    await runCli(["login", "--with-key", "sk-stored"], { env: env() });
+    await runCli(["config", "set", "akashmlApiKey", "akml-keep-me"], { env: env() });
+    await runCli(["config", "set", "akashmlBaseUrl", "https://keep-me-akashml.example"], { env: env() });
+
+    const out = await runCli(["logout"], { env: env() });
+    expect(out.code).toBe(0);
+
+    const configFile = join(home.configDir, "config.json");
+    const stored = JSON.parse(readFileSync(configFile, "utf8"));
+    expect(stored.apiKey).toBeUndefined();
+    expect(stored.akashmlApiKey).toBe("akml-keep-me");
+    expect(stored.akashmlBaseUrl).toBe("https://keep-me-akashml.example");
   });
 
   it("home when signed in aggregates user, balance and deployments", async () => {
