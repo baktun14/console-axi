@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -11,6 +11,8 @@ export const DEFAULT_PROVIDER_PROXY_URL = "https://console.akash.network/provide
 export const DEFAULT_NETWORK = "mainnet";
 // Base of the Console web app, used to build deployment deep-links for humans.
 export const DEFAULT_CONSOLE_WEB_URL = "https://console.akash.network";
+// AkashML is a separate managed-inference service (api.akashml.com), not the Console API.
+export const DEFAULT_AKASHML_BASE_URL = "https://api.akashml.com";
 
 export interface StoredConfig {
   apiKey?: string;
@@ -18,6 +20,8 @@ export interface StoredConfig {
   providerProxyUrl?: string;
   network?: string;
   consoleWebUrl?: string;
+  akashmlApiKey?: string;
+  akashmlBaseUrl?: string;
 }
 
 /** Fully-resolved settings for a single invocation. */
@@ -27,7 +31,18 @@ export interface ResolvedConfig {
   providerProxyUrl: string;
   network: string;
   consoleWebUrl: string;
+  akashmlApiKey?: string;
+  akashmlBaseUrl: string;
 }
+
+/** Console-specific fields, as opposed to the akashml* fields. Used to scope `logout`. */
+const CONSOLE_KEYS: readonly (keyof StoredConfig)[] = [
+  "apiKey",
+  "baseUrl",
+  "providerProxyUrl",
+  "network",
+  "consoleWebUrl"
+];
 
 export interface Overrides {
   /** `--url` flag, overrides the API base URL for this invocation only. */
@@ -62,9 +77,17 @@ export function writeStoredConfig(config: StoredConfig): void {
   chmodSync(path, 0o600);
 }
 
-export function clearStoredConfig(): void {
+/**
+ * Unset only the Console-specific fields, leaving akashml* fields untouched.
+ * Used by the global `logout` command, which is scoped to Console credentials
+ * (AkashML has its own `akashml logout`).
+ */
+export function clearConsoleConfig(): void {
   const path = configPath();
-  if (existsSync(path)) rmSync(path);
+  if (!existsSync(path)) return;
+  const stored = readStoredConfig();
+  for (const key of CONSOLE_KEYS) delete stored[key];
+  writeStoredConfig(stored);
 }
 
 /**
@@ -80,12 +103,16 @@ export function resolveConfig(overrides: Overrides = {}): ResolvedConfig {
     process.env.CONSOLE_PROVIDER_PROXY_URL ?? stored.providerProxyUrl ?? DEFAULT_PROVIDER_PROXY_URL
   ).replace("%{NETWORK}", network);
   const consoleWebUrl = process.env.CONSOLE_WEB_URL ?? stored.consoleWebUrl ?? DEFAULT_CONSOLE_WEB_URL;
+  const akashmlApiKey = process.env.AKASHML_API_KEY ?? stored.akashmlApiKey;
+  const akashmlBaseUrl = process.env.AKASHML_API_URL ?? stored.akashmlBaseUrl ?? DEFAULT_AKASHML_BASE_URL;
   return {
     apiKey,
     baseUrl: stripTrailingSlash(baseUrl),
     providerProxyUrl: stripTrailingSlash(providerProxyUrl),
     network,
-    consoleWebUrl: stripTrailingSlash(consoleWebUrl)
+    consoleWebUrl: stripTrailingSlash(consoleWebUrl),
+    akashmlApiKey,
+    akashmlBaseUrl: stripTrailingSlash(akashmlBaseUrl)
   };
 }
 
@@ -100,6 +127,19 @@ export function requireAuth(overrides: Overrides = {}): ResolvedConfig & { apiKe
     });
   }
   return { ...config, apiKey: config.apiKey };
+}
+
+/** Resolve config and assert an AkashML API key is present, else a friendly auth error. */
+export function requireAkashmlAuth(overrides: Overrides = {}): ResolvedConfig & { akashmlApiKey: string } {
+  const config = resolveConfig(overrides);
+  if (!config.akashmlApiKey) {
+    throw new AxiError({
+      code: "unauthorized",
+      message: "No AkashML API key configured. Log in with a key or set AKASHML_API_KEY.",
+      help: ["console-axi akashml login --with-key <akml-...>"]
+    });
+  }
+  return { ...config, akashmlApiKey: config.akashmlApiKey };
 }
 
 function stripTrailingSlash(url: string): string {

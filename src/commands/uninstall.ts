@@ -3,6 +3,9 @@ import { basename } from "node:path";
 
 import type { Command } from "commander";
 
+import { removeClaudeAkashmlEnv } from "../agents/akashml-claude.js";
+import { removeCodexAkashml } from "../agents/akashml-codex.js";
+import { removeOpencodeAkashml } from "../agents/akashml-opencode.js";
 import { removeCodex } from "../agents/codex.js";
 import { removeOpencode } from "../agents/opencode.js";
 import { configDir } from "../config/config.js";
@@ -30,6 +33,17 @@ export function registerUninstall(program: Command): void {
         if (opts.skill) result.skill = removeClaudeSkill().status;
         if (codex) result.codex = codex;
         if (opencode) result.opencode = opencode;
+
+        // AkashML agent installers: always swept (idempotent; a scope that
+        // was never configured for AkashML just reports "absent"). Global
+        // scope only, matching the claude hook/skill above — `--project`
+        // scoped state lives in the user's project dir, not this machine's
+        // shared config, so uninstall doesn't reach into arbitrary cwds.
+        result.akashml = {
+          claude: removeClaudeAkashmlEnv().status,
+          codex: removeCodexAkashml().status,
+          opencode: removeOpencodeAkashml().status
+        };
 
         if (opts.purge) {
           const dir = configDir();

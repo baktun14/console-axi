@@ -23,7 +23,9 @@ const KEYS: Record<keyof StoredConfig, KeySpec> = {
   baseUrl: { env: "CONSOLE_API_URL", hasDefault: true },
   providerProxyUrl: { env: "CONSOLE_PROVIDER_PROXY_URL", hasDefault: true },
   network: { env: "CONSOLE_NETWORK", hasDefault: true },
-  consoleWebUrl: { env: "CONSOLE_WEB_URL", hasDefault: true }
+  consoleWebUrl: { env: "CONSOLE_WEB_URL", hasDefault: true },
+  akashmlApiKey: { env: "AKASHML_API_KEY", hasDefault: false },
+  akashmlBaseUrl: { env: "AKASHML_API_URL", hasDefault: true }
 };
 
 type ConfigKey = keyof StoredConfig;
@@ -37,13 +39,18 @@ function assertKey(key: string): ConfigKey {
   });
 }
 
-function mask(value: string): string {
+/** Mask a secret value for display (e.g. an API key echoed back in a setup note). */
+export function mask(value: string): string {
   return value.length <= 8 ? "****" : `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
+function isSecretKey(key: ConfigKey): boolean {
+  return key.toLowerCase().includes("apikey");
 }
 
 function display(key: ConfigKey, value: string | undefined): string | null {
   if (value === undefined) return null;
-  return key === "apiKey" ? mask(value) : value;
+  return isSecretKey(key) ? mask(value) : value;
 }
 
 /** Provenance of the effective value, mirroring resolveConfig precedence. */

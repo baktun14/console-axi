@@ -61,6 +61,7 @@ Options: `--accept cheapest|first|<provider>`, `--bid-timeout <s>`, `--timeout <
 | Debug | `logs <dseq> [--follow]`, `events <dseq> [--follow]`, `exec <dseq> --service <s> -- <cmd>`, `shell <dseq> --service <s>` |
 | Wallet | `wallet list\|balance\|settings\|cost`, `usage` |
 | Keys/tokens | `apikey list\|create\|delete`, `jwt create` |
+| AkashML inference | `akashml login\|logout\|models\|chat\|setup` |
 | Lifecycle | `upgrade`, `uninstall`, `completion <shell>` |
 
 Run `console-axi` with no arguments for a live status home view, or `console-axi <command> --help` for details.
@@ -84,6 +85,36 @@ console-axi uninstall             # removes them (and the binary; --no-self to k
 
 `setup` installs a SessionStart hook that injects a compact status view (auth, active deployment count, top deployments) at the start of each agent session, and installs the [Agent Skill](./skills/console-axi/SKILL.md) into `~/.claude/skills/`. `install.sh` runs `setup` for you. Both honor `CLAUDE_CONFIG_DIR`. For other agents, `setup --agent codex|opencode` installs the same skill plus a managed block in that agent's global `AGENTS.md` — the session-start equivalent, since neither Codex nor opencode has an exec hook. `uninstall` sweeps all three agents symmetrically (absent = no-op, user content preserved).
 
+## AkashML inference
+
+[AkashML](https://akashml.com) is Akash's managed LLM inference API — an OpenAI/Anthropic-compatible surface for open-source models running on Akash compute. It has its own key and login state, independent of the Console wallet auth above.
+
+```bash
+console-axi akashml login --with-key <akml-...>     # or export AKASHML_API_KEY=<key>
+console-axi akashml models                          # id, ctx, maxOut, price per 1M tokens, features, quant
+console-axi akashml chat --model <id> "hello"       # streams raw text to stdout
+```
+
+`--model` is always required — there's no stored default; `akashml models` is the discovery path. Filter with `--model <substring>`, `--tools`, `--reasoning`.
+
+`chat` options: `--system <text>`, `--max-tokens <n>`, `--temperature <n>`, `--no-stream` (one structured response instead of a stream), `--effort minimal|low|medium|high|xhigh`, `--reasoning-max-tokens <n>`, `--show-reasoning` (reasoning deltas to stderr, never stdout). `--json` gives structured output instead of a stream. The prompt is the trailing args, or stdin when omitted or passed as `-`.
+
+`setup` points a coding agent at AkashML:
+
+```bash
+console-axi akashml setup --agent claude --model <id>               # ~/.claude/settings.json
+console-axi akashml setup --agent claude --model <id> --project     # ./.claude/settings.local.json
+console-axi akashml setup --agent claude --model <id> --sonnet <id> --opus <id> --haiku <id>
+
+export AKASHML_API_KEY=<key>    # codex/opencode read the key from env only, never write it to disk
+console-axi akashml setup --agent codex --model <id>
+console-axi akashml setup --agent opencode --model <id>
+
+console-axi akashml setup --agent claude --remove [--project]       # undo
+```
+
+`setup` validates every `--model` id against the live AkashML catalog before writing config; pass `--no-verify` to skip that check. Claude `setup` writes the literal API key into the settings file (`ANTHROPIC_AUTH_TOKEN`); codex and opencode only ever reference `AKASHML_API_KEY` from the environment, never a literal key on disk. `akashml logout` removes only the AkashML key (Console `logout` is untouched); global `uninstall` sweeps AkashML agent configs too, but only global-scope ones — undo a `--project` claude setup with `console-axi akashml setup --agent claude --remove --project`. Env overrides: `AKASHML_API_KEY`, `AKASHML_API_URL` (default `https://api.akashml.com`).
+
 ## Configuration
 
 | Setting | Env | Config key | Default |
@@ -93,6 +124,8 @@ console-axi uninstall             # removes them (and the binary; --no-self to k
 | Provider proxy | `CONSOLE_PROVIDER_PROXY_URL` | `providerProxyUrl` | `https://console.akash.network/provider-proxy-%{NETWORK}` |
 | Network | `CONSOLE_NETWORK` | `network` | `mainnet` |
 | Console web URL | `CONSOLE_WEB_URL` | `consoleWebUrl` | `https://console.akash.network` |
+| AkashML API key | `AKASHML_API_KEY` | `akashmlApiKey` | — |
+| AkashML base URL | `AKASHML_API_URL` | `akashmlBaseUrl` | `https://api.akashml.com` |
 
 Precedence: env > stored config > defaults. `--url` overrides the base URL per invocation. `%{NETWORK}` in the provider-proxy URL is replaced with the resolved network (used by `logs`, `events`, `exec`, `shell`).
 

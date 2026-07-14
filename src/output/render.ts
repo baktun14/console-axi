@@ -32,6 +32,11 @@ function activeFormat(): OutputFormat {
   return (process.env.CONSOLE_AXI_OUTPUT ?? "").toLowerCase() === "json" ? "json" : "toon";
 }
 
+/** Whether the current invocation is emitting JSON (global --json flag or CONSOLE_AXI_OUTPUT=json). */
+export function isJsonOutput(): boolean {
+  return activeFormat() === "json";
+}
+
 export function toToon(value: unknown): string {
   return encode(value as never);
 }

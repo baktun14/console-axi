@@ -10,7 +10,8 @@ const CONFIG: ResolvedConfig = {
   baseUrl: "https://api.test",
   providerProxyUrl: "https://proxy.test",
   network: "mainnet",
-  consoleWebUrl: "https://console.test"
+  consoleWebUrl: "https://console.test",
+  akashmlBaseUrl: "https://api.akashml.test"
 };
 
 describe("createApiClient debug instrumentation", () => {

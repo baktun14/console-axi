@@ -10,7 +10,7 @@
  */
 export const SKILL_MD = `---
 name: console-axi
-description: Deploy and manage Akash Network workloads through the Console managed wallet. Use for "deploy to Akash", "write/validate an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", or managing bids, leases, wallet balance, and API keys via console-axi.
+description: Deploy and manage Akash Network workloads through the Console managed wallet, and call AkashML managed LLM inference. Use for "deploy to Akash", "write/validate an Akash SDL", "check my Akash deployment", "stream Akash logs", "run a command in my Akash service", managing bids, leases, wallet balance, and API keys, or "AkashML login", "list AkashML models", "chat with an LLM on Akash", and pointing a coding agent (claude/codex/opencode) at AkashML — all via console-axi.
 ---
 
 # console-axi
@@ -165,4 +165,49 @@ All output is TOON. Exit codes: 0 = success or idempotent no-op, 1 = error,
 \`console-axi setup\` installs a session-start hook that injects a compact status
 view (auth, active deployment count, top deployments) at the start of each agent
 session, and installs this skill. \`console-axi uninstall\` reverses both.
+
+## AkashML inference
+
+AkashML (https://akashml.com) is Akash's managed LLM inference API — an
+OpenAI/Anthropic-compatible surface for open-source models running on Akash
+compute. It has its own key and login state, separate from the Console auth above.
+
+\`\`\`
+console-axi akashml login --with-key <akml-...>   # or export AKASHML_API_KEY=<key>
+console-axi akashml models                         # id, ctx, maxOut, price/1M tokens, features, quant
+console-axi akashml chat --model <id> "hello"      # streams raw text to stdout
+\`\`\`
+
+\`--model\` is always required — there is no stored default; \`akashml models\`
+is the discovery path. Filter the list with \`--model <substring>\`, \`--tools\`,
+\`--reasoning\`.
+
+\`chat\` flags: \`--system <text>\`, \`--max-tokens <n>\`, \`--temperature <n>\`,
+\`--no-stream\` (one structured response instead of a stream), \`--effort
+minimal|low|medium|high|xhigh\`, \`--reasoning-max-tokens <n>\`,
+\`--show-reasoning\` (reasoning deltas go to stderr, never stdout). \`--json\`
+gives structured output instead of a stream. The prompt is the trailing args,
+or stdin when omitted or passed as \`-\`.
+
+Point a coding agent at AkashML with \`setup\`:
+
+\`\`\`
+console-axi akashml setup --agent claude --model <id>              # ~/.claude/settings.json
+console-axi akashml setup --agent claude --model <id> --project    # ./.claude/settings.local.json
+export AKASHML_API_KEY=<key>   # codex/opencode read the key from env only
+console-axi akashml setup --agent codex --model <id>
+console-axi akashml setup --agent opencode --model <id>
+console-axi akashml setup --agent claude --remove                  # undo
+\`\`\`
+
+\`--agent claude\` also accepts \`--sonnet --opus --haiku <id>\` tier overrides
+(each defaults to \`--model\`). \`setup\` validates every \`--model\` id against
+the live AkashML catalog before writing config; pass \`--no-verify\` to skip
+that check. Claude \`setup\` writes the literal API key into the settings file
+(\`ANTHROPIC_AUTH_TOKEN\`); codex and opencode only ever reference
+\`AKASHML_API_KEY\` from the environment, never a literal key on disk — export
+\`AKASHML_API_KEY\` in your shell profile first. \`akashml logout\` removes only
+the AkashML key (Console \`logout\` is untouched); global \`uninstall\` sweeps
+AkashML agent configs too, but only global-scope ones — undo a \`--project\`
+claude setup with \`console-axi akashml setup --agent claude --remove --project\`.
 `;

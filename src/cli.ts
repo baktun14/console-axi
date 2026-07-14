@@ -1,5 +1,6 @@
 import { Command, CommanderError } from "commander";
 
+import { registerAkashml } from "./commands/akashml.js";
 import { registerApiKey } from "./commands/apikey.js";
 import { registerAuth } from "./commands/auth.js";
 import { registerCompletion } from "./commands/completion.js";
@@ -54,6 +55,7 @@ function buildProgram(): Command {
 
   registerHome(program);
   registerAuth(program);
+  registerAkashml(program);
   registerConfig(program);
   registerSetup(program);
   registerSdl(program);

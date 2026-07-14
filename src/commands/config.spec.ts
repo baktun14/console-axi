@@ -53,9 +53,54 @@ describe("config command", () => {
 
     const body = decode(line(0)) as { config: Array<{ key: string; source: string }> };
     const byKey = Object.fromEntries(body.config.map((row) => [row.key, row]));
-    expect(Object.keys(byKey).sort()).toEqual(["apiKey", "baseUrl", "consoleWebUrl", "network", "providerProxyUrl"]);
+    expect(Object.keys(byKey).sort()).toEqual([
+      "akashmlApiKey",
+      "akashmlBaseUrl",
+      "apiKey",
+      "baseUrl",
+      "consoleWebUrl",
+      "network",
+      "providerProxyUrl"
+    ]);
     expect(byKey.network?.source).toBe("default");
     expect(byKey.apiKey?.source).toBe("unset");
+    expect(byKey.akashmlBaseUrl?.source).toBe("default");
+    expect(byKey.akashmlApiKey?.source).toBe("unset");
+  });
+
+  it("resolves akashmlApiKey/akashmlBaseUrl with env over file over default", async () => {
+    const { line } = setup();
+    await run("config", "set", "akashmlApiKey", "akml-stored-key");
+    await run("config", "get", "akashmlBaseUrl");
+    expect(decode(line(1))).toMatchObject({
+      key: "akashmlBaseUrl",
+      value: "https://api.akashml.com",
+      source: "default"
+    });
+
+    vi.stubEnv("AKASHML_API_KEY", "akml-env-key");
+    vi.stubEnv("AKASHML_API_URL", "https://env-akashml.example");
+    await run("config", "get", "akashmlApiKey");
+    await run("config", "get", "akashmlBaseUrl");
+
+    expect(decode(line(2))).toMatchObject({ key: "akashmlApiKey", source: "env" });
+    expect(decode(line(3))).toMatchObject({
+      key: "akashmlBaseUrl",
+      value: "https://env-akashml.example",
+      source: "env"
+    });
+  });
+
+  it("always masks akashmlApiKey and never prints the full secret", async () => {
+    const { output, line } = setup();
+    const secret = "akml-abcdefghijklmnop";
+
+    await run("config", "set", "akashmlApiKey", secret);
+    await run("config", "get", "akashmlApiKey");
+
+    const everything = output().join("\n");
+    expect(everything).not.toContain(secret);
+    expect(decode(line(1))).toMatchObject({ key: "akashmlApiKey", source: "file" });
   });
 
   it("always masks the apiKey and never prints the full secret", async () => {
