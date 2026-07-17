@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,7 +42,9 @@ describe("deployment lifecycle", () => {
 
     expect(result.code).toBe(0);
     expect(result.toon()).toMatchObject({ dseq: "100", txHash: "TX123ABC", state: "open" });
-    expect(existsSync(join(home.configDir, "manifests", "100.json"))).toBe(true);
+    const manifest = join(home.configDir, "manifests", "100.json");
+    expect(existsSync(manifest)).toBe(true);
+    expect(statSync(manifest).mode & 0o777).toBe(0o600);
   });
 
   it("list renders a compact table with pagination counts", async () => {
@@ -79,6 +81,10 @@ describe("deployment lifecycle", () => {
   });
 
   it("close succeeds and is an idempotent no-op on 404", async () => {
+    const manifests = join(home.configDir, "manifests");
+    mkdirSync(manifests, { recursive: true });
+    writeFileSync(join(manifests, "100.json"), "secret");
+    writeFileSync(join(manifests, "101.json"), "secret");
     api.on("DELETE", "/v1/deployments/100", { body: { data: {} } });
     api.on("DELETE", "/v1/deployments/101", { status: 404, body: { message: "gone" } });
 
@@ -89,6 +95,20 @@ describe("deployment lifecycle", () => {
     expect(closed.toon()).toMatchObject({ ok: true, state: "closed" });
     expect(again.code).toBe(0);
     expect(again.toon()).toMatchObject({ ok: true, state: "closed", note: "already closed (no-op)" });
+    expect(existsSync(join(manifests, "100.json"))).toBe(false);
+    expect(existsSync(join(manifests, "101.json"))).toBe(false);
+  });
+
+  it("retains the cached manifest when close fails", async () => {
+    const manifest = join(home.configDir, "manifests", "100.json");
+    mkdirSync(join(home.configDir, "manifests"), { recursive: true });
+    writeFileSync(manifest, "secret");
+    api.on("DELETE", "/v1/deployments/100", { status: 500, body: { message: "try again" } });
+
+    const result = await runCli(["deployment", "close", "100"], { env: env() });
+
+    expect(result.code).toBe(1);
+    expect(existsSync(manifest)).toBe(true);
   });
 
   it("lease create reuses the manifest cached by deployment create", async () => {

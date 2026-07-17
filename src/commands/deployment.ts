@@ -11,7 +11,7 @@ import {
   watchOutcome
 } from "../api/deployment-format.js";
 import { action, authedContext } from "../context.js";
-import { saveManifest } from "../deploy/manifest-store.js";
+import { removeCachedManifest, saveManifest } from "../deploy/manifest-store.js";
 import { AxiError } from "../errors.js";
 import { readFileOrStdin } from "../input.js";
 import { consoleDeploymentUrl } from "../output/console-url.js";
@@ -278,12 +278,16 @@ export function registerDeployment(program: Command): void {
         const consoleUrl = consoleDeploymentUrl(config.consoleWebUrl, dseq);
         const res = await client.DELETE("/v1/deployments/{dseq}", { params: { path: { dseq } } });
         // Already-closed deployments should not be an error (AXI principle: idempotent).
-        if (res.response.status === 404 || res.response.status === 400) {
-          printResult({ ok: true, dseq, console: consoleUrl, state: "closed", note: "already closed (no-op)" });
-          return;
-        }
-        unwrap(res, { dseq });
-        printResult({ ok: true, dseq, console: consoleUrl, state: "closed" });
+        const alreadyClosed = res.response.status === 404 || res.response.status === 400;
+        if (!alreadyClosed) unwrap(res, { dseq });
+        removeCachedManifest(dseq);
+        printResult({
+          ok: true,
+          dseq,
+          console: consoleUrl,
+          state: "closed",
+          ...(alreadyClosed ? { note: "already closed (no-op)" } : {})
+        });
       })
     );
 
